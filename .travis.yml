@@ -1,0 +1,13 @@
+language: java
+git:
+  depth: 3
+jdk:
+  - openjdk8
+env:
+  - HADOOP_VERSION=3.1.1
+script: "./gradlew clean check --stacktrace --info"
+
+# safelist
+branches:
+  only:
+  - master

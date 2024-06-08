@@ -1,104 +1,218 @@
-# knitr
+# TonY
+[![CircleCI](https://circleci.com/gh/tony-framework/TonY/tree/master.svg?style=svg)](https://circleci.com/gh/tony-framework/TonY/tree/master)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/5080/badge)](https://bestpractices.coreinfrastructure.org/projects/5080)
 
-<!-- badges: start -->
-[![R-CMD-check](https://github.com/yihui/knitr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/yihui/knitr/actions/workflows/R-CMD-check.yaml)
-[![Check knitr examples](https://github.com/yihui/knitr/actions/workflows/knitr-examples.yaml/badge.svg)](https://github.com/yihui/knitr/actions/workflows/knitr-examples.yaml)
-[![Codecov test coverage](https://codecov.io/gh/yihui/knitr/branch/master/graph/badge.svg)](https://app.codecov.io/gh/yihui/knitr?branch=master)
-[![CRAN release](https://www.r-pkg.org/badges/version/knitr)](https://cran.r-project.org/package=knitr)
-<!-- badges: end -->
+![tony-logo-small](https://user-images.githubusercontent.com/544734/57793050-45b3ff00-76f5-11e9-8cc0-8ebb830b6e78.png)
 
-The R package **knitr** is a general-purpose literate programming engine,
-with lightweight API's designed to give users full control of the output
-without heavy coding work. It combines many features into one package with
-slight tweaks motivated from my everyday use of Sweave. See the package
-[homepage](https://yihui.org/knitr/) for details and examples. See
-[FAQ's](https://yihui.org/knitr/faq/) for a list of
-frequently asked questions (including where to ask questions).
+TonY is a framework to _natively_ run deep learning jobs on [Apache Hadoop](http://hadoop.apache.org/).
+It currently supports [TensorFlow](https://github.com/tensorflow/tensorflow), [PyTorch](https://github.com/pytorch/pytorch), [MXNet](https://github.com/apache/incubator-mxnet) and [Horovod](https://github.com/horovod/horovod).
+TonY enables running either single node or distributed
+training as a Hadoop application. This native connector, together with other TonY features, aims to run
+machine learning jobs reliably and flexibly. For a quick overview of TonY and comparisons to other frameworks, please see
+[this presentation](https://www.slideshare.net/ssuser72f42a/scaling-deep-learning-on-hadoop-at-linkedin).
 
-## Installation
+## Compatibility Notes
 
-You can install the stable version on
-[CRAN](https://cran.r-project.org/package=knitr):
+TonY itself is compatible with [Hadoop 2.6.0](https://hadoop.apache.org/docs/r2.6.0/) (CDH5.11.0) and above. If you need GPU isolation from TonY, you need [Hadoop 2.10](https://hadoop.apache.org/docs/r2.10.0/) or higher for Hadoop 2, or [Hadoop 3.1.0](https://hortonworks.com/blog/gpus-support-in-apache-hadoop-3-1-yarn-hdp-3/) or higher for Hadoop 3.
 
-```r
-install.packages('knitr')
-```
+## Build
 
-You can also install the development version (hourly build) from
-<https://yihui.r-universe.dev>:
+TonY is built using [Gradle](https://github.com/gradle/gradle). To build TonY, run:
 
-```r
-options(repos = c(
-  yihui = 'https://yihui.r-universe.dev',
-  CRAN = 'https://cloud.r-project.org'
-))
+    ./gradlew build
 
-install.packages('knitr')
-```
+This will automatically run tests, if want to build without running tests, run:
 
-## Motivation
+    ./gradlew build -x test
 
-While Sweave and related add-on packages like
-[**cacheSweave**](https://cran.r-project.org/package=cacheSweave) and
-[**pgfSweave**](https://cran.r-project.org/package=pgfSweave) are fairly good
-engines for literate programming in R, I often feel my hands are tied.
-For example:
-
-- I stared at the source code of Sweave and wished for hundreds of times,
-  *if only I could easily insert* `[width=.8\textwidth]` *between*
-  `\includegraphics` *and* `{my-plot.pdf}`. (The official way in Sweave is
-  `\setkeys{Gin}` but it is setting a global width, which is unrealistic
-  since we often have to set widths individually; yes, you can use
-  `\setkeys{Gin}` for many times, but why not just provide an option for
-  each chunk?)
-- I wished for many times, *if only I could use graphics devices other
-  than PDF and postscript*; now the dream has come true in the official R,
-  but what I was hoping for was an option as simple as `dev = 'png'` or `dev
-  = 'CairoJPEG'`.
-- I wished multiple plots in a code chunk could be recorded instead of only
-  the last one.
-- I wished there was a way to round the numbers in `\Sexpr{}` other than
-  writing expressions like `\Sexpr{round(x, 3)}` for *each single* `\Sexpr{}`
-- I wished I did not have to `print()` plots from.
-  [**ggplot2**](https://cran.r-project.org/package=ggplot2) and a simple
-  `qplot(x, y)` would just give me a plot in Sweave.
-- I wished users would never need instructions on `Sweave.sty` or run into
-  troubles due to the fact that LaTeX cannot find `Sweave.sty`.
-- I wished **cacheSweave** could print the results of a code chunk even if
-  it was cached.
-- I wished [**brew**](https://cran.r-project.org/package=brew) could support
-  graphics.
-- I wished [**R2HTML**](https://cran.r-project.org/package=R2HTML) could
-  support R code syntax highlighting.
-- ...
-
-
-[<img src="http://i.imgur.com/yYw46aF.jpg" align="right" alt="The book Dynamic Documents with R and knitr" />](https://www.amazon.com/dp/1498716962/)
-
-The package **knitr** was designed to give the user access to every part of
-the process of dealing with a literate programming document, so there is no
-need to hack at any core components if you want more freedom. I have gone
-through the source code of **pgfSweave** and **cacheSweave** for a couple of
-times and I often feel uncomfortable with the large amount of code copied
-from official R, especially when R has a new version released (I will begin
-to worry if the add-on packages are still up-to-date with the official
-Sweave).
+The jar required to run TonY will be located in `./tony-cli/build/libs/`.
 
 ## Usage
 
-```r
-library(knitr)
-?knit
-knit(input)
-```
+There are two ways to launch your deep learning jobs with TonY:
+- Use a zipped Python virtual environment.
+- Use Docker container.
 
-If options are not explicitly specified, **knitr** will try to guess
-reasonable default settings. A few manuals are available such as the [main
-manual](https://yihui.org/knitr/demo/manual/), and the
-[graphics
-manual](https://yihui.org/knitr/demo/graphics/). For a
-more organized reference, see the [knitr book](https://www.amazon.com/dp/1498716962/).
+### Use a zipped Python virtual environment
 
-## License
+The difference between this approach and the one with Docker is
+- You don't need to set up your Hadoop cluster with Docker support.
+- There is no requirement on a Docker image registry.
 
-This package is free and open source software, licensed under GPL.
+As you know, nothing comes for free. If you don't want to bother setting your cluster with Docker support, you'd need to prepare a zipped virtual environment for your job and your cluster should have the same OS version as the computer which builds the Python virtual environment.
+
+#### Python virtual environment in a zip
+
+    $ unzip -Z1 my-venv.zip | head -n 10
+      Python/
+      Python/bin/
+      Python/bin/rst2xml.py
+      Python/bin/wheel
+      Python/bin/rst2html5.py
+      Python/bin/rst2odt.py
+      Python/bin/rst2s5.py
+      Python/bin/pip2.7
+      Python/bin/saved_model_cli
+      Python/bin/rst2pseudoxml.pyc
+
+#### TonY jar and tony.xml
+
+    MyJob/
+      > src/
+        > models/
+          mnist_distributed.py
+      tony.xml
+      tony-cli-0.4.7-all.jar
+      my-venv.zip # The additional file you need.
+
+A similar `tony.xml` but without Docker related configurations:
+
+    $ cat tony/tony.xml
+    <configuration>
+      <property>
+        <name>tony.worker.instances</name>
+        <value>4</value>
+      </property>
+      <property>
+        <name>tony.worker.memory</name>
+        <value>4g</value>
+      </property>
+      <property>
+        <name>tony.worker.gpus</name>
+        <value>1</value>
+      </property>
+      <property>
+        <name>tony.ps.memory</name>
+        <value>3g</value>
+      </property>
+    </configuration>
+
+Then you can launch your job:
+
+    $ java -cp "`hadoop classpath --glob`:MyJob/*:MyJob" \
+                com.linkedin.tony.cli.ClusterSubmitter \
+                -executes models/mnist_distributed.py \ # relative path to model program inside the src_dir
+                -task_params '--input_dir /path/to/hdfs/input --output_dir /path/to/hdfs/output \
+                -python_venv my-venv.zip \
+                -python_binary_path Python/bin/python \  # relative path to the Python binary inside the my-venv.zip
+                -src_dir src
+
+### Use a Docker container
+Note that this requires you have a properly configured Hadoop cluster with Docker support. Check this [documentation](https://hadoop.apache.org/docs/r2.9.1/hadoop-yarn/hadoop-yarn-site/DockerContainers.html) if you are unsure how to set it up. Assuming you have properly set up your Hadoop cluster with Docker container runtime, you should have already built a proper Docker image with required Hadoop configurations. The next thing you need is to install your Python dependencies inside your Docker image - TensorFlow or PyTorch.
+
+Below is a folder structure of what you need to launch the job:
+
+    MyJob/
+      > src/
+        > models/
+          mnist_distributed.py
+      tony.xml
+      tony-cli-0.4.7-all.jar
+
+The `src/` folder would contain all your training script. The `tony.xml` is used to config your training job. Specifically for using Docker as the container runtime, your configuration should be similar to something below:
+
+    $ cat MyJob/tony.xml
+    <configuration>
+      <property>
+        <name>tony.worker.instances</name>
+        <value>4</value>
+      </property>
+      <property>
+        <name>tony.worker.memory</name>
+        <value>4g</value>
+      </property>
+      <property>
+        <name>tony.worker.gpus</name>
+        <value>1</value>
+      </property>
+      <property>
+        <name>tony.ps.memory</name>
+        <value>3g</value>
+      </property>
+      <property>
+        <name>tony.docker.enabled</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>tony.docker.containers.image</name>
+        <value>YOUR_DOCKER_IMAGE_NAME</value>
+      </property>
+    </configuration>
+
+For a full list of configurations, please see the [wiki](https://github.com/linkedin/TonY/wiki/TonY-Configurations).
+
+Now you're ready to launch your job:
+
+    $ java -cp "`hadoop classpath --glob`:MyJob/*:MyJob/" \
+            com.linkedin.tony.cli.ClusterSubmitter \
+            -executes models/mnist_distributed.py \
+            -task_params '--input_dir /path/to/hdfs/input --output_dir /path/to/hdfs/output' \
+            -src_dir src \
+            -python_binary_path /home/user_name/python_virtual_env/bin/python
+
+## TonY arguments
+The command line arguments are as follows:
+
+| Name               | Required? | Example                                           | Meaning                                                                                                                                                                                                           |
+|--------------------|-----------|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| executes           | yes       | --executes model/mnist.py                         | Location to the entry point of your training code.                                                                                                                                                                |
+| src_dir            | yes       | --src src/                                        | Specifies the name of the root directory locally which contains all of your python model source code. This directory will be copied to all worker node.                                                           |
+| task_params        | no        | --input_dir /hdfs/input --output_dir /hdfs/output | The command line arguments which will be passed to your entry point                                                                                                                                               |
+| python_venv        | no        | --python_venv venv.zip                            | Local or remote Path to the *zipped* Python virtual environment, remote path like `--python_venv hdfs://nameservice01/user/tony/venv.zip`                                                                         |
+| python_binary_path | no        | --python_binary_path Python/bin/python            | Used together with python_venv, describes the relative path in your python virtual environment which contains the python binary, or an absolute path to use a python binary already installed on all worker nodes |
+| shell_env          | no        | --shell_env LD_LIBRARY_PATH=/usr/local/lib64/     | Specifies key-value pairs for environment variables which will be set in your python worker/ps processes.                                                                                                         |
+| conf_file          | no        | --conf_file tony-local.xml                        | Location of a TonY configuration file, also support remote path, like `--conf_file hdfs://nameservice01/user/tony/tony-remote.xml`                                                                                |
+| conf               | no        | --conf tony.application.security.enabled=false    | Override configurations from your configuration file via command line
+| sidecar_tensorboard_log_dir | no | --sidecar_tensorboard_log_dir /hdfs/path/tensorboard_log_dir | HDFS path to tensorboard log dir, it will enable sidecar tensorboard managed by TonY. More detailed example refers to tony-examples/mnist_tensorflow module                                          |
+
+## TonY configurations
+
+There are multiple ways to specify configurations for your TonY job. As above, you can create an XML file called `tony.xml`
+and add its parent directory to your java classpath.
+
+Alternatively, you can pass `-conf_file <name_of_conf_file>` to the java command line if you have a file not named `tony.xml`
+containing your configurations. (As before, the parent directory of this file must be added to the java classpath.)
+
+If you wish to override configurations from your configuration file via command line, you can do so by passing `-conf <tony.conf.key>=<tony.conf.value>` argument pairs on the command line.
+
+Please check our [wiki](https://github.com/linkedin/TonY/wiki/TonY-Configurations) for all TonY configurations and their default values.
+
+## TonY Examples
+
+Below are examples to run distributed deep learning jobs with TonY:
+- [Distributed MNIST with TensorFlow](https://github.com/linkedin/TonY/tree/master/tony-examples/mnist-tensorflow)
+- [Distributed MNIST with PyTorch](https://github.com/linkedin/TonY/tree/master/tony-examples/mnist-pytorch)
+- [Distributed MNIST with Horovod](https://github.com/linkedin/TonY/tree/master/tony-examples/horovod-on-tony)
+- [Linear regression with MXNet](https://github.com/linkedin/TonY/tree/master/tony-examples/linearregression-mxnet)
+- [TonY in Google Cloud Platform](https://github.com/linkedin/TonY/tree/master/tony-examples/tony-in-gcp)
+- [TonY in Azkaban video](https://youtu.be/DM89y8BGFaY)
+
+## More information
+
+For more information about TonY, check out the following:
+- [TonY presentation at DataWorks Summit '19 in Washington, D.C.](https://www.slideshare.net/ssuser72f42a/scaling-deep-learning-on-hadoop-at-linkedin)
+- [TonY OpML '19 paper](https://arxiv.org/abs/1904.01631)
+- [TonY LinkedIn Engineering blog post](https://engineering.linkedin.com/blog/2018/09/open-sourcing-tony--native-support-of-tensorflow-on-hadoop)
+
+
+## FAQ
+
+1. My tensorflow process hangs with
+    ```
+    2018-09-13 03:02:31.538790: E tensorflow/core/distributed_runtime/master.cc:272] CreateSession failed because worker /job:worker/replica:0/task:0 returned error: Unavailable: OS Error
+    INFO:tensorflow:An error was raised while a session was being created. This may be due to a preemption of a connected worker or parameter server. A new session will be created. Error: OS Error
+    INFO:tensorflow:Graph was finalized.
+    2018-09-13 03:03:33.792490: I tensorflow/core/distributed_runtime/master_session.cc:1150] Start master session ea811198d338cc1d with config:
+    INFO:tensorflow:Waiting for model to be ready.  Ready_for_local_init_op:  Variables not initialized: conv1/Variable, conv1/Variable_1, conv2/Variable, conv2/Variable_1, fc1/Variable, fc1/Variable_1, fc2/Variable, fc2/Variable_1, global_step, adam_optimizer/beta1_power, adam_optimizer/beta2_power, conv1/Variable/Adam, conv1/Variable/Adam_1, conv1/Variable_1/Adam, conv1/Variable_1/Adam_1, conv2/Variable/Adam, conv2/Variable/Adam_1, conv2/Variable_1/Adam, conv2/Variable_1/Adam_1, fc1/Variable/Adam, fc1/Variable/Adam_1, fc1/Variable_1/Adam, fc1/Variable_1/Adam_1, fc2/Variable/Adam, fc2/Variable/Adam_1, fc2/Variable_1/Adam, fc2/Variable_1/Adam_1, ready: None
+    ```
+    Why?
+
+    Try adding the path to your libjvm.so shared library to your LD_LIBRARY_PATH environment variable for your workers. See above for an example.
+
+2. How do I configure arbitrary TensorFlow job types?
+
+    Please see the [wiki](https://github.com/linkedin/TonY/wiki/TonY-Configurations#task-configuration) on TensorFlow task configuration for details.
+
+3. My tensorflow's partial workers hang when chief finished. Or evaluator hang when chief and workers finished.
+   
+   Please see the [PR#521](https://github.com/tony-framework/TonY/pull/621) and [PR#641](https://github.com/tony-framework/TonY/issues/641) on Tensorflow configuration to solve it.

@@ -1,29 +1,37 @@
-# How to contribute
+Contribution Agreement
+======================
 
-Thank you for taking the time to contribute!
+As a contributor, you represent that the code you submit is your original work or
+that of your employer (in which case you represent you have the right to bind your
+employer). By submitting code, you (and, if applicable, your employer) are licensing the submitted code under the Apache 2.0 license.
 
-## Reporting bug
+General Contribution Tips
+=========================
 
-- Please read the documentation, maybe it's a limitation, a known issue of that release. This might also help to clear false expectation from the tool itself, or help you to classify you request not as a bug, but maybe an enhancement.
+We welcome any contributions that make TonY more reliable, accurate, usable, or
+extensible. It is generally preferred that new features and behaviors should be
+configurable unless sufficient discussion is held to determine that there is no
+situation in which the previous behavior is desirable. GitHub issues are the
+appropriate forum for such discussions.
 
-- Ensure that the bug was not already reported by searching on GitHub under Issues.
+Responsible Disclosure of Security Vulnerabilities
+==================================================
 
-- If you have not found an open issue addressing the problem, open a new one. Be sure to include a title and clear description, with as much relevant information as possible. You might also attach the output of the tool, this case try to run it with verbose flags.
+**Do not file an issue on Github for security issues.**  Please review
+the [guidelines for disclosure][disclosure_guidelines].  Reports should
+be encrypted using PGP ([public key][pubkey]) and sent to
+[security@linkedin.com][disclosure_email] preferably with the title
+"Vulnerability in Github LinkedIn/tony - &lt;short summary&gt;".
 
-- For more detailed information on submitting a bug report and creating an issue, visit our reporting guidelines.
+Tips for Getting Your Pull Request Accepted
+===========================================
 
-## Suggesting enhancements
+1. Make sure all new features are tested and the tests pass.
+2. Bug fixes must include a test case demonstrating the error that it fixes.
+3. Open an issue first and seek advice for your change before submitting
+   a pull request. Large features which have never been discussed are
+   unlikely to be accepted. **You have been warned.**
 
-- Enhancement suggestions are tracked as GitHub issues.
-
-- Use a clear and descriptive title for the issue to identify the suggestion.
-
-- Describe the current behavior and explain which behavior you expected to see instead and why.
-
-## Pull Requests
-
-- Open a new GitHub pull request with the patch.
-
-- Ensure the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
-
-- Think about testability. Please write test(s) for the problem you have fixed. Make sure that existing test are not get broken.
+[disclosure_guidelines]: https://www.linkedin.com/help/linkedin/answer/62924
+[pubkey]: https://gist.github.com/chriseppstein/3f45d3a8e6fb42f24cb7b3f77f21381e
+[disclosure_email]: mailto:security@linkedin.com?subject=Vulnerability%20in%20Github%20LinkedIn/tony%20-%20%3Csummary%3E
