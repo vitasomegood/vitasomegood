@@ -1,1 +1,25 @@
-.DS_Store
+/pg_install
+/target
+/tmp_check
+/tmp_check_cli
+__pycache__/
+test_output/
+.vscode
+.idea
+neon.iml
+/.neon
+/integration_tests/.neon
+compaction-suite-results.*
+
+# Coverage
+*.profraw
+*.profdata
+
+*.key
+*.crt
+*.o
+*.so
+*.Po
+
+# pgindent typedef lists
+*.list

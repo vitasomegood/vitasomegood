@@ -1,37 +1,84 @@
-Contribution Agreement
-======================
+# How to contribute
 
-As a contributor, you represent that the code you submit is your original work or
-that of your employer (in which case you represent you have the right to bind your
-employer). By submitting code, you (and, if applicable, your employer) are licensing the submitted code under the Apache 2.0 license.
+Howdy! Usual good software engineering practices apply. Write
+tests. Write comments. Follow standard Rust coding practices where
+possible. Use `cargo fmt` and `cargo clippy` to tidy up formatting.
 
-General Contribution Tips
-=========================
+There are soft spots in the code, which could use cleanup,
+refactoring, additional comments, and so forth. Let's try to raise the
+bar, and clean things up as we go. Try to leave code in a better shape
+than it was before.
 
-We welcome any contributions that make TonY more reliable, accurate, usable, or
-extensible. It is generally preferred that new features and behaviors should be
-configurable unless sufficient discussion is held to determine that there is no
-situation in which the previous behavior is desirable. GitHub issues are the
-appropriate forum for such discussions.
+## Pre-commit hook
 
-Responsible Disclosure of Security Vulnerabilities
-==================================================
+We have a sample pre-commit hook in `pre-commit.py`.
+To set it up, run:
 
-**Do not file an issue on Github for security issues.**  Please review
-the [guidelines for disclosure][disclosure_guidelines].  Reports should
-be encrypted using PGP ([public key][pubkey]) and sent to
-[security@linkedin.com][disclosure_email] preferably with the title
-"Vulnerability in Github LinkedIn/tony - &lt;short summary&gt;".
+```bash
+ln -s ../../pre-commit.py .git/hooks/pre-commit
+```
 
-Tips for Getting Your Pull Request Accepted
-===========================================
+This will run following checks on staged files before each commit:
+- `rustfmt`
+- checks for Python files, see [obligatory checks](/docs/sourcetree.md#obligatory-checks).
 
-1. Make sure all new features are tested and the tests pass.
-2. Bug fixes must include a test case demonstrating the error that it fixes.
-3. Open an issue first and seek advice for your change before submitting
-   a pull request. Large features which have never been discussed are
-   unlikely to be accepted. **You have been warned.**
+There is also a separate script `./run_clippy.sh` that runs `cargo clippy` on the whole project
+and `./scripts/reformat` that runs all formatting tools to ensure the project is up to date.
 
-[disclosure_guidelines]: https://www.linkedin.com/help/linkedin/answer/62924
-[pubkey]: https://gist.github.com/chriseppstein/3f45d3a8e6fb42f24cb7b3f77f21381e
-[disclosure_email]: mailto:security@linkedin.com?subject=Vulnerability%20in%20Github%20LinkedIn/tony%20-%20%3Csummary%3E
+If you want to skip the hook, run `git commit` with `--no-verify` option.
+
+## Submitting changes
+
+1. Get at least one +1 on your PR before you push.
+
+   For simple patches, it will only take a minute for someone to review
+it.
+
+2. Don't force push small changes after making the PR ready for review.
+Doing so will force readers to re-read your entire PR, which will delay
+the review process.
+
+3. Always keep the CI green.
+
+   Do not push, if the CI failed on your PR. Even if you think it's not
+your patch's fault. Help to fix the root cause if something else has
+broken the CI, before pushing.
+
+*Happy Hacking!*
+
+# How to run a CI pipeline on Pull Requests from external contributors
+_An instruction for maintainers_
+
+## TL;DR:
+- Review the PR
+- If and only if it looks **safe** (i.e. it doesn't contain any malicious code which could expose secrets or harm the CI), then:
+    - Press the "Approve and run" button in GitHub UI
+    - Add the `approved-for-ci-run` label to the PR
+    - Currently draft PR will skip e2e test (only for internal contributors). After turning the PR 'Ready to Review' CI will trigger e2e test
+      - Add `run-e2e-tests-in-draft` label to run e2e test in draft PR (override above behaviour)
+      - The `approved-for-ci-run` workflow will add `run-e2e-tests-in-draft` automatically to run e2e test for external contributors
+
+Repeat all steps after any change to the PR.
+- When the changes are ready to get merged — merge the original PR (not the internal one)
+
+## Longer version:
+
+GitHub Actions triggered by the `pull_request` event don't share repository secrets with the forks (for security reasons).
+So, passing the CI pipeline on Pull Requests from external contributors is impossible.
+
+We're using the following approach to make it work:
+- After the review, assign the `approved-for-ci-run` label to the PR if changes look safe
+- A GitHub Action will create an internal branch and a new PR with the same changes (for example, for a PR `#1234`, it'll be a branch `ci-run/pr-1234`)
+- Because the PR is created from the internal branch, it is able to access repository secrets (that's why it's crucial to make sure that the PR doesn't contain any malicious code that could expose our secrets or intentionally harm the CI)
+- The label gets removed automatically, so to run CI again with new changes, the label should be added again (after the review)
+
+For details see [`approved-for-ci-run.yml`](.github/workflows/approved-for-ci-run.yml)
+
+## How do I make build-tools image "pinned"
+
+It's possible to update the `pinned` tag of the `build-tools` image using the `pin-build-tools-image.yml` workflow.
+
+```bash
+gh workflow -R neondatabase/neon run pin-build-tools-image.yml \
+            -f from-tag=cc98d9b00d670f182c507ae3783342bd7e64c31e
+```
