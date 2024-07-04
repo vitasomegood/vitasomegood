@@ -1,93 +1,68 @@
-# Rails Girls Guides
+# SameBoy
 
-<a href="https://railsgirls.com" target="_blank"><img alt="Rails Girls" src="/images/rails-girls-logo.png" width="15%" align="right"></a>
+SameBoy is an open source Game Boy (DMG) and Game Boy Color (CGB) emulator, written in portable C. It has a native Cocoa frontend for macOS, an SDL frontend for other operating systems, and a libretro core. It also includes a text-based debugger with an expression evaluator. Visit [the website](https://sameboy.github.io/).
 
-The purpose of Rails Girls is to give tools for women to understand technology. The Rails Girls events do this by providing a great first experience on building the Internet.
+## Features
+Features common to both Cocoa and SDL versions:
+ * Supports Game Boy (DMG) and Game Boy Color (CGB) emulation
+ * Lets you choose the model you want to emulate regardless of ROM
+ * High quality 96KHz audio
+ * Battery save support
+ * Save states
+ * Includes open source DMG and CGB boot ROMs:
+   * Complete support for (and documentation of) *all* game-specific palettes in the CGB boot ROM, for accurate emulation of Game Boy games on a Game Boy Color
+   * Supports manual palette selection with key combinations, with 4 additional new palettes (A + B + direction)
+   * Supports palette selection in a CGB game, forcing it to run in 'paletted' DMG mode, if ROM allows doing so.
+   * Support for games with a non-Nintendo logo in the header
+   * No long animation in the DMG boot
+ * Advanced text-based debugger with an expression evaluator, disassembler, conditional breakpoints, conditional watchpoints, backtracing and other features
+ * Extremely high accuracy
+ * Emulates [PCM_12 and PCM_34 registers](https://github.com/LIJI32/GBVisualizer)
+ * T-cycle accurate emulation of LCD timing effects, supporting the Demotronic trick, Prehistorik Man, [GBVideoPlayer](https://github.com/LIJI32/GBVideoPlayer) and other tech demos
+ * Real time clock emulation
+ * Retina/High DPI display support, allowing a wider range of scaling factors without artifacts
+ * Optional frame blending (Requires OpenGL 3.2 or later)
+ * Several [scaling algorithms](https://sameboy.github.io/scaling/) (Including exclusive algorithms like OmniScale and Anti-aliased Scale2x; Requires OpenGL 3.2 or later or Metal)
 
-Rails Girls was founded at the end of 2010 in Helsinki. Originally intended as a one-time event, we never thought to see so many chapters from all around the world! This guide will help you get started.
+Features currently supported only with the Cocoa version:
+ * Native Cocoa interface, with support for all system-wide features, such as drag-and-drop and smart titlebars
+ * Game Boy Camera support
+ 
+[Read more](https://sameboy.github.io/features/).
 
-You can use our materials and instructions to roll out your own workshop in your city, workplace or kitchen! Read more about Rails Girls at https://railsgirls.com
+## Compatibility
+SameBoy passes all of [blargg's test ROMs](http://gbdev.gg8.se/wiki/articles/Test_ROMs#Blargg.27s_tests), all of [mooneye-gb's](https://github.com/Gekkio/mooneye-gb) tests (Some tests require the original boot ROMs), and all of [Wilbert Pol's tests](https://github.com/wilbertpol/mooneye-gb/tree/master/tests/acceptance). SameBoy should work with most games and demos, please [report](https://github.com/LIJI32/SameBoy/issues/new) any broken ROM. The latest results for SameBoy's automatic tester are available [here](https://sameboy.github.io/automation/).
 
-## Quick start
+## Contributing
+SameBoy is an open-source project licensed under the Expat license (with an additional exception for the iOS folder), and you're welcome to contribute by creating issues, implementing new features, improving emulation accuracy and fixing existing open issues. You can read the [contribution guidelines](CONTRIBUTING.md) to make sure your contributions are as effective as possible.
 
-View the guides at https://guides.railsgirls.com or clone this repo and install & run [jekyll](https://github.com/mojombo/jekyll)
+## Compilation
+SameBoy requires the following tools and libraries to build:
+ * clang (Recommended; required for macOS) or GCC
+ * make
+ * macOS Cocoa frontend: macOS SDK and Xcode (For command line tools and ibtool)
+ * SDL frontend: libsdl2
+ * [rgbds](https://github.com/gbdev/rgbds/releases/), for boot ROM compilation
+ * [cppp](https://github.com/BR903/cppp), for cleaning up headers when compiling SameBoy as a library
 
-### Installing jekyll
+On Windows, SameBoy also requires:
+ * Visual Studio (For headers, etc.)
+ * [GnuWin](http://gnuwin32.sourceforge.net/)
+ * Running vcvars64 before running make. Make sure all required tools and libraries are in %PATH% and %lib%, respectively. (see [Build FAQ](https://github.com/LIJI32/SameBoy/blob/master/build-faq.md) for more details on Windows compilation)
 
-```
-$ cd guides.railsgirls.com
-```
+To compile, simply run `make`. The targets are:
+ * `cocoa` (Default for macOS)
+ * `sdl` (Default for everything else)
+ * `lib` (Creates libsameboy.o and libsameboy.a for statically linking SameBoy, as well as a headers directory with corresponding headers; currently not supported on Windows due to linker limitations)
+ * `ios` (Plain iOS .app bundle), `ios-ipa` (iOS IPA archive for side-loading), `ios-deb` (iOS deb package for jailbroken devices)
+ * `libretro`
+ * `bootroms`
+ * `tester` 
 
-```
-$ bundle install
-```
+You may also specify `CONF=debug` (default), `CONF=release`, `CONF=native_release` or `CONF=fat_release`  to control optimization, symbols and multi-architectures. `native_release` is faster than `release`, but is optimized to the host's CPU and therefore is not portable. `fat_release` is exclusive to macOS and builds x86-64 and ARM64 fat binaries; this requires using a recent enough `clang` and macOS SDK using `xcode-select`, or setting them explicitly with `CC=` and `SYSROOT=`, respectively. All other configurations will build to your host architecture, except for the iOS targets. You may set `BOOTROMS_DIR=...` to a directory containing precompiled boot ROM files, otherwise the build system will compile and use SameBoy's own boot ROMs.
 
-### Pygments and Code Highlighting
+The SDL port will look for resource files with a path relative to executable and inside the directory specified by the `DATA_DIR` variable. If you are packaging SameBoy, you may wish to override this by setting the `DATA_DIR` variable during compilation to the target path of the directory containing all files (apart from the executable, that's not necessary) from the `build/bin/SDL` directory in the source tree. Make sure the variable ends with a `/` character. On FreeDesktop environments, `DATA_DIR` will default to `/usr/local/share/sameboy/`. `PREFIX` and `DESTDIR` follow their standard usage and default to an empty string an `/usr/local`, respectively
 
-The guides use the [pygments](https://pygments.org/) library to do syntax highlighting. If you don't have it installed you won't be able to see the highlight sections like the following:
+Linux, BSD, and other FreeDesktop users can run `sudo make install` to install SameBoy as both a GUI app and a command line tool.
 
-```
-{% highlight %}
-{% endhighlight %}
-```
-
-If you aren't editing the code blocks, you can safely ignore this. If you want pygments, you can follow the [install instructions](https://jekyllrb.com/docs/installation/) in the "Pygments" section.
-
-### Coach highlights
-
-A custom Liquid tag is available for coach notes. Add these to guides when you want the coach to explain something. Use this tag to make sure the visual element is always the same and easy to recognize.
-
-```
-{% coach %}
-Add helpful text here for the coach!
-{% endcoach %}
-```
-
-### Run jekyll
-
-```
-$ bundle exec jekyll server --watch
-```
-
-### Styling
-
-Wrap keyboard shortcuts with [kbd](https://www.w3.org/wiki/HTML/Elements/kbd) HTML tag.
-
-To make posts consistent in style use `Ctrl+C` over `CTRL-c`/`ctrl+c`
-
-```
-To shut down the server you can hit <kbd>Ctrl</kbd>+<kbd>C</kbd>
-```
-
-### Having trouble?
-
-You might find some useful hints in this jekyll issue if it's not working as expected: [Issue 503](https://github.com/mojombo/jekyll/issues/503)
-
-## Contributing a Guide
-
-To contribute a guide, view the instructions at https://guides.railsgirls.com/contributing
-
-## X
-
-For updates and more, follow [@railsgirls](https://twitter.com/railsgirls) on X
-
-## Website & Blog
-
-Official website and blog for Rails Girls movement can be found at https://railsgirls.com
-
-## E-mail list
-
-Global mailing list for Rails Girls events can be found at https://groups.google.com/group/rails-girls-team
-
-## Credits
-
-* Karri Saarinen / [@karrisaarinen](https://twitter.com/karrisaarinen) / [github](https://github.com/ksaa)
-* Linda Liukas / [@lindaliukas](https://twitter.com/lindaliukas) / [github](https://github.com/lindaliukas)
-* Vesa Vänskä / [@vesan](https://twitter.com/vesan) / [github](https://github.com/vesan)
-* Terence Lee / [@hone02](https://twitter.com/hone02) / [github](https://github.com/hone)
-* Tom de Bruijn / [@tombruijn](https://mastodon.social/@tombruijn) / [GitHub](https://github.com/tombruijn)
-
-..and all the other coaches and people making Rails Girls awesome. Please add yourself!
-
-## LICENSE
-[![License: CC BY-SA 3.0](https://licensebuttons.net/l/by-sa/3.0/80x15.png)](https://creativecommons.org/licenses/by-sa/2.0/)
+SameBoy is compiled and tested on macOS, Ubuntu and 64-bit Windows 10.

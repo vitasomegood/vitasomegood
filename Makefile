@@ -1,325 +1,757 @@
-ROOT_PROJECT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+# Make hacks
+.INTERMEDIATE:
 
-# Where to install Postgres, default is ./pg_install, maybe useful for package managers
-POSTGRES_INSTALL_DIR ?= $(ROOT_PROJECT_DIR)/pg_install/
+# Set target, configuration, version and destination folders
 
-OPENSSL_PREFIX_DIR := /usr/local/openssl
-ICU_PREFIX_DIR := /usr/local/icu
+PLATFORM := $(shell uname -s)
+ifneq ($(findstring MINGW,$(PLATFORM)),)
+PLATFORM := windows32
+USE_WINDRES := true
+endif
 
-#
-# We differentiate between release / debug build types using the BUILD_TYPE
-# environment variable.
-#
-BUILD_TYPE ?= debug
-ifeq ($(BUILD_TYPE),release)
-	PG_CONFIGURE_OPTS = --enable-debug --with-openssl
-	PG_CFLAGS = -O2 -g3 $(CFLAGS)
-	# Unfortunately, `--profile=...` is a nightly feature
-	CARGO_BUILD_FLAGS += --release
-else ifeq ($(BUILD_TYPE),debug)
-	PG_CONFIGURE_OPTS = --enable-debug --with-openssl --enable-cassert --enable-depend
-	PG_CFLAGS = -O0 -g3 $(CFLAGS)
+ifneq ($(findstring MSYS,$(PLATFORM)),)
+PLATFORM := windows32
+endif
+
+ifeq ($(PLATFORM),windows32)
+_ := $(shell chcp 65001)
+EXESUFFIX:=.exe
+NATIVE_CC = clang -IWindows -Wno-deprecated-declarations --target=x86_64-pc-windows
+SDL_AUDIO_DRIVERS ?= xaudio2 sdl
 else
-	$(error Bad build type '$(BUILD_TYPE)', see Makefile for options)
+EXESUFFIX:=
+NATIVE_CC := cc
+SDL_AUDIO_DRIVERS ?= sdl
 endif
 
-ifeq ($(shell test -e /home/nonroot/.docker_build && echo -n yes),yes)
-	# Exclude static build openssl, icu for local build (MacOS, Linux)
-	# Only keep for build type release and debug
-	PG_CFLAGS += -I$(OPENSSL_PREFIX_DIR)/include
-	PG_CONFIGURE_OPTS += --with-icu
-	PG_CONFIGURE_OPTS += ICU_CFLAGS='-I/$(ICU_PREFIX_DIR)/include -DU_STATIC_IMPLEMENTATION'
-	PG_CONFIGURE_OPTS += ICU_LIBS='-L$(ICU_PREFIX_DIR)/lib -L$(ICU_PREFIX_DIR)/lib64 -licui18n -licuuc -licudata -lstdc++ -Wl,-Bdynamic -lm'
-	PG_CONFIGURE_OPTS += LDFLAGS='-L$(OPENSSL_PREFIX_DIR)/lib -L$(OPENSSL_PREFIX_DIR)/lib64 -L$(ICU_PREFIX_DIR)/lib -L$(ICU_PREFIX_DIR)/lib64 -Wl,-Bstatic -lssl -lcrypto -Wl,-Bdynamic -lrt -lm -ldl -lpthread'
+PB12_COMPRESS := build/pb12$(EXESUFFIX)
+
+ifeq ($(PLATFORM),Darwin)
+DEFAULT := cocoa
+ENABLE_OPENAL ?= 1
+else
+DEFAULT := sdl
 endif
 
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Linux)
-	# Seccomp BPF is only available for Linux
-	PG_CONFIGURE_OPTS += --with-libseccomp
-else ifeq ($(UNAME_S),Darwin)
-	ifndef DISABLE_HOMEBREW
-		# macOS with brew-installed openssl requires explicit paths
-		# It can be configured with OPENSSL_PREFIX variable
-		OPENSSL_PREFIX := $(shell brew --prefix openssl@3)
-		PG_CONFIGURE_OPTS += --with-includes=$(OPENSSL_PREFIX)/include --with-libraries=$(OPENSSL_PREFIX)/lib
-		PG_CONFIGURE_OPTS += PKG_CONFIG_PATH=$(shell brew --prefix icu4c)/lib/pkgconfig
-		# macOS already has bison and flex in the system, but they are old and result in postgres-v14 target failure
-		# brew formulae are keg-only and not symlinked into HOMEBREW_PREFIX, force their usage
-		EXTRA_PATH_OVERRIDES += $(shell brew --prefix bison)/bin/:$(shell brew --prefix flex)/bin/:
-	endif
+NULL := /dev/null
+ifeq ($(PLATFORM),windows32)
+NULL := NUL
 endif
 
-# Use -C option so that when PostgreSQL "make install" installs the
-# headers, the mtime of the headers are not changed when there have
-# been no changes to the files. Changing the mtime triggers an
-# unnecessary rebuild of 'postgres_ffi'.
-PG_CONFIGURE_OPTS += INSTALL='$(ROOT_PROJECT_DIR)/scripts/ninstall.sh -C'
-
-# Choose whether we should be silent or verbose
-CARGO_BUILD_FLAGS += --$(if $(filter s,$(MAKEFLAGS)),quiet,verbose)
-# Fix for a corner case when make doesn't pass a jobserver
-CARGO_BUILD_FLAGS += $(filter -j1,$(MAKEFLAGS))
-
-# This option has a side effect of passing make jobserver to cargo.
-# However, we shouldn't do this if `make -n` (--dry-run) has been asked.
-CARGO_CMD_PREFIX += $(if $(filter n,$(MAKEFLAGS)),,+)
-# Force cargo not to print progress bar
-CARGO_CMD_PREFIX += CARGO_TERM_PROGRESS_WHEN=never CI=1
-# Set PQ_LIB_DIR to make sure `storage_controller` get linked with bundled libpq (through diesel)
-CARGO_CMD_PREFIX += PQ_LIB_DIR=$(POSTGRES_INSTALL_DIR)/v16/lib
-
-#
-# Top level Makefile to build Neon and PostgreSQL
-#
-.PHONY: all
-all: neon postgres neon-pg-ext
-
-### Neon Rust bits
-#
-# The 'postgres_ffi' depends on the Postgres headers.
-.PHONY: neon
-neon: postgres-headers walproposer-lib
-	+@echo "Compiling Neon"
-	$(CARGO_CMD_PREFIX) cargo build $(CARGO_BUILD_FLAGS)
-
-### PostgreSQL parts
-# Some rules are duplicated for Postgres v14 and 15. We may want to refactor
-# to avoid the duplication in the future, but it's tolerable for now.
-#
-$(POSTGRES_INSTALL_DIR)/build/%/config.status:
-	+@echo "Configuring Postgres $* build"
-	@test -s $(ROOT_PROJECT_DIR)/vendor/postgres-$*/configure || { \
-		echo "\nPostgres submodule not found in $(ROOT_PROJECT_DIR)/vendor/postgres-$*/, execute "; \
-		echo "'git submodule update --init --recursive --depth 2 --progress .' in project root.\n"; \
-		exit 1; }
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/$*
-
-	VERSION=$*; \
-	EXTRA_VERSION=$$(cd $(ROOT_PROJECT_DIR)/vendor/postgres-$$VERSION && git rev-parse HEAD); \
-	(cd $(POSTGRES_INSTALL_DIR)/build/$$VERSION && \
-	env PATH="$(EXTRA_PATH_OVERRIDES):$$PATH" $(ROOT_PROJECT_DIR)/vendor/postgres-$$VERSION/configure \
-		CFLAGS='$(PG_CFLAGS)' \
-		$(PG_CONFIGURE_OPTS) --with-extra-version=" ($$EXTRA_VERSION)" \
-		--prefix=$(abspath $(POSTGRES_INSTALL_DIR))/$$VERSION > configure.log)
-
-# nicer alias to run 'configure'
-# Note: I've been unable to use templates for this part of our configuration.
-# I'm not sure why it wouldn't work, but this is the only place (apart from
-# the "build-all-versions" entry points) where direct mention of PostgreSQL
-# versions is used.
-.PHONY: postgres-configure-v16
-postgres-configure-v16: $(POSTGRES_INSTALL_DIR)/build/v16/config.status
-.PHONY: postgres-configure-v15
-postgres-configure-v15: $(POSTGRES_INSTALL_DIR)/build/v15/config.status
-.PHONY: postgres-configure-v14
-postgres-configure-v14: $(POSTGRES_INSTALL_DIR)/build/v14/config.status
-
-# Install the PostgreSQL header files into $(POSTGRES_INSTALL_DIR)/<version>/include
-.PHONY: postgres-headers-%
-postgres-headers-%: postgres-configure-%
-	+@echo "Installing PostgreSQL $* headers"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/src/include MAKELEVEL=0 install
-
-# Compile and install PostgreSQL
-.PHONY: postgres-%
-postgres-%: postgres-configure-% \
-		  postgres-headers-% # to prevent `make install` conflicts with neon's `postgres-headers`
-	+@echo "Compiling PostgreSQL $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$* MAKELEVEL=0 install
-	+@echo "Compiling libpq $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/src/interfaces/libpq install
-	+@echo "Compiling pg_prewarm $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/pg_prewarm install
-	+@echo "Compiling pg_buffercache $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/pg_buffercache install
-	+@echo "Compiling pageinspect $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/pageinspect install
-	+@echo "Compiling amcheck $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/amcheck install
-	+@echo "Compiling test_decoding $*"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/test_decoding install
-
-.PHONY: postgres-clean-%
-postgres-clean-%:
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$* MAKELEVEL=0 clean
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/pg_buffercache clean
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/contrib/pageinspect clean
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/src/interfaces/libpq clean
-
-.PHONY: postgres-check-%
-postgres-check-%: postgres-%
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$* MAKELEVEL=0 check
-
-.PHONY: neon-pg-ext-%
-neon-pg-ext-%: postgres-%
-	+@echo "Compiling neon $*"
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/neon-$*
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		-C $(POSTGRES_INSTALL_DIR)/build/neon-$* \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon/Makefile install
-	+@echo "Compiling neon_walredo $*"
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/neon-walredo-$*
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		-C $(POSTGRES_INSTALL_DIR)/build/neon-walredo-$* \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon_walredo/Makefile install
-	+@echo "Compiling neon_rmgr $*"
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/neon-rmgr-$*
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		-C $(POSTGRES_INSTALL_DIR)/build/neon-rmgr-$* \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon_rmgr/Makefile install
-	+@echo "Compiling neon_test_utils $*"
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/neon-test-utils-$*
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		-C $(POSTGRES_INSTALL_DIR)/build/neon-test-utils-$* \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon_test_utils/Makefile install
-	+@echo "Compiling neon_utils $*"
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/neon-utils-$*
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		-C $(POSTGRES_INSTALL_DIR)/build/neon-utils-$* \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon_utils/Makefile install
-
-.PHONY: neon-pg-clean-ext-%
-neon-pg-clean-ext-%:
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config \
-	-C $(POSTGRES_INSTALL_DIR)/build/neon-$* \
-	-f $(ROOT_PROJECT_DIR)/pgxn/neon/Makefile clean
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config \
-	-C $(POSTGRES_INSTALL_DIR)/build/neon-walredo-$* \
-	-f $(ROOT_PROJECT_DIR)/pgxn/neon_walredo/Makefile clean
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config \
-	-C $(POSTGRES_INSTALL_DIR)/build/neon-test-utils-$* \
-	-f $(ROOT_PROJECT_DIR)/pgxn/neon_test_utils/Makefile clean
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/$*/bin/pg_config \
-	-C $(POSTGRES_INSTALL_DIR)/build/neon-utils-$* \
-	-f $(ROOT_PROJECT_DIR)/pgxn/neon_utils/Makefile clean
-
-# Build walproposer as a static library. walproposer source code is located
-# in the pgxn/neon directory.
-#
-# We also need to include libpgport.a and libpgcommon.a, because walproposer
-# uses some functions from those libraries.
-#
-# Some object files are removed from libpgport.a and libpgcommon.a because
-# they depend on openssl and other libraries that are not included in our
-# Rust build.
-.PHONY: walproposer-lib
-walproposer-lib: neon-pg-ext-v16
-	+@echo "Compiling walproposer-lib"
-	mkdir -p $(POSTGRES_INSTALL_DIR)/build/walproposer-lib
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/v16/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		-C $(POSTGRES_INSTALL_DIR)/build/walproposer-lib \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon/Makefile walproposer-lib
-	cp $(POSTGRES_INSTALL_DIR)/v16/lib/libpgport.a $(POSTGRES_INSTALL_DIR)/build/walproposer-lib
-	cp $(POSTGRES_INSTALL_DIR)/v16/lib/libpgcommon.a $(POSTGRES_INSTALL_DIR)/build/walproposer-lib
-ifeq ($(UNAME_S),Linux)
-	$(AR) d $(POSTGRES_INSTALL_DIR)/build/walproposer-lib/libpgport.a \
-		pg_strong_random.o
-	$(AR) d $(POSTGRES_INSTALL_DIR)/build/walproposer-lib/libpgcommon.a \
-		pg_crc32c.o \
-		hmac_openssl.o \
-		cryptohash_openssl.o \
-		scram-common.o \
-		md5_common.o \
-		checksum_helper.o
+ifneq ($(shell which xdg-open 2> $(NULL))$(FREEDESKTOP),)
+# Running on an FreeDesktop environment, configure for (optional) installation
+DESTDIR ?= 
+PREFIX ?= /usr/local
+DATA_DIR ?= $(PREFIX)/share/sameboy/
+FREEDESKTOP ?= true
 endif
 
-.PHONY: walproposer-lib-clean
-walproposer-lib-clean:
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/v16/bin/pg_config \
-		-C $(POSTGRES_INSTALL_DIR)/build/walproposer-lib \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon/Makefile clean
+default: $(DEFAULT)
 
-.PHONY: neon-pg-ext
-neon-pg-ext: \
-	neon-pg-ext-v14 \
-	neon-pg-ext-v15 \
-	neon-pg-ext-v16
+ifeq ($(MAKECMDGOALS),)
+MAKECMDGOALS := $(DEFAULT)
+endif
 
-.PHONY: neon-pg-clean-ext
-neon-pg-clean-ext: \
-	neon-pg-clean-ext-v14 \
-	neon-pg-clean-ext-v15 \
-	neon-pg-clean-ext-v16
+ifneq ($(DISABLE_TIMEKEEPING),)
+CFLAGS += -DGB_DISABLE_TIMEKEEPING
+CPPP_FLAGS += -DGB_DISABLE_TIMEKEEPING
+else
+CPPP_FLAGS += -UGB_DISABLE_TIMEKEEPING
+endif
 
-# shorthand to build all Postgres versions
-.PHONY: postgres
-postgres: \
-	postgres-v14 \
-	postgres-v15 \
-	postgres-v16
+ifneq ($(DISABLE_REWIND),)
+CFLAGS += -DGB_DISABLE_REWIND
+CPPP_FLAGS += -DGB_DISABLE_REWIND
+CORE_FILTER += Core/rewind.c
+else
+CPPP_FLAGS += -UGB_DISABLE_REWIND
+endif
 
-.PHONY: postgres-headers
-postgres-headers: \
-	postgres-headers-v14 \
-	postgres-headers-v15 \
-	postgres-headers-v16
+ifneq ($(DISABLE_DEBUGGER),)
+CFLAGS += -DGB_DISABLE_DEBUGGER
+CPPP_FLAGS += -DGB_DISABLE_DEBUGGER
+CORE_FILTER += Core/debugger.c Core/sm83_disassembler.c Core/symbol_hash.c
+else
+CPPP_FLAGS += -UGB_DISABLE_DEBUGGER
+endif
 
-.PHONY: postgres-clean
-postgres-clean: \
-	postgres-clean-v14 \
-	postgres-clean-v15 \
-	postgres-clean-v16
+ifneq ($(DISABLE_CHEATS),)
+CFLAGS += -DGB_DISABLE_CHEATS
+CPPP_FLAGS += -DGB_DISABLE_CHEATS
+CORE_FILTER += Core/cheats.c
+else
+CPPP_FLAGS += -UGB_DISABLE_CHEATS
+endif
 
-.PHONY: postgres-check
-postgres-check: \
-	postgres-check-v14 \
-	postgres-check-v15 \
-	postgres-check-v16
+ifneq ($(CORE_FILTER)$(DISABLE_TIMEKEEPING),)
+ifneq ($(MAKECMDGOALS),lib)
+$(error SameBoy features can only be disabled when compiling the 'lib' target)
+endif
+endif
 
-# This doesn't remove the effects of 'configure'.
-.PHONY: clean
-clean: postgres-clean neon-pg-clean-ext
-	$(CARGO_CMD_PREFIX) cargo clean
-
-# This removes everything
-.PHONY: distclean
-distclean:
-	rm -rf $(POSTGRES_INSTALL_DIR)
-	$(CARGO_CMD_PREFIX) cargo clean
-
-.PHONY: fmt
-fmt:
-	./pre-commit.py --fix-inplace
-
-postgres-%-pg-bsd-indent: postgres-%
-	+@echo "Compiling pg_bsd_indent"
-	$(MAKE) -C $(POSTGRES_INSTALL_DIR)/build/$*/src/tools/pg_bsd_indent/
-
-# Create typedef list for the core. Note that generally it should be combined with
-# buildfarm one to cover platform specific stuff.
-# https://wiki.postgresql.org/wiki/Running_pgindent_on_non-core_code_or_development_code
-postgres-%-typedefs.list: postgres-%
-	$(ROOT_PROJECT_DIR)/vendor/postgres-$*/src/tools/find_typedef $(POSTGRES_INSTALL_DIR)/$*/bin > $@
-
-# Indent postgres. See src/tools/pgindent/README for details.
-.PHONY: postgres-%-pgindent
-postgres-%-pgindent: postgres-%-pg-bsd-indent postgres-%-typedefs.list
-	+@echo merge with buildfarm typedef to cover all platforms
-	+@echo note: I first tried to download from pgbuildfarm.org, but for unclear reason e.g. \
-		REL_16_STABLE list misses PGSemaphoreData
-	# wget -q -O - "http://www.pgbuildfarm.org/cgi-bin/typedefs.pl?branch=REL_16_STABLE" |\
-	# cat - postgres-$*-typedefs.list | sort | uniq > postgres-$*-typedefs-full.list
-	cat $(ROOT_PROJECT_DIR)/vendor/postgres-$*/src/tools/pgindent/typedefs.list |\
-		cat - postgres-$*-typedefs.list | sort | uniq > postgres-$*-typedefs-full.list
-	+@echo note: you might want to run it on selected files/dirs instead.
-	INDENT=$(POSTGRES_INSTALL_DIR)/build/$*/src/tools/pg_bsd_indent/pg_bsd_indent \
-		$(ROOT_PROJECT_DIR)/vendor/postgres-$*/src/tools/pgindent/pgindent --typedefs postgres-$*-typedefs-full.list \
-		$(ROOT_PROJECT_DIR)/vendor/postgres-$*/src/ \
-		--excludes $(ROOT_PROJECT_DIR)/vendor/postgres-$*/src/tools/pgindent/exclude_file_patterns
-	rm -f pg*.BAK
-
-# Indent pxgn/neon.
-.PHONY: pgindent
-neon-pgindent: postgres-v16-pg-bsd-indent neon-pg-ext-v16
-	$(MAKE) PG_CONFIG=$(POSTGRES_INSTALL_DIR)/v16/bin/pg_config CFLAGS='$(PG_CFLAGS) $(COPT)' \
-		FIND_TYPEDEF=$(ROOT_PROJECT_DIR)/vendor/postgres-v16/src/tools/find_typedef \
-		INDENT=$(POSTGRES_INSTALL_DIR)/build/v16/src/tools/pg_bsd_indent/pg_bsd_indent \
-		PGINDENT_SCRIPT=$(ROOT_PROJECT_DIR)/vendor/postgres-v16/src/tools/pgindent/pgindent \
-		-C $(POSTGRES_INSTALL_DIR)/build/neon-v16 \
-		-f $(ROOT_PROJECT_DIR)/pgxn/neon/Makefile pgindent
+CPPP_FLAGS += -UGB_INTERNAL
 
 
-.PHONY: setup-pre-commit-hook
-setup-pre-commit-hook:
-	ln -s -f $(ROOT_PROJECT_DIR)/pre-commit.py .git/hooks/pre-commit
+include version.mk
+COPYRIGHT_YEAR := $(shell grep -oE "20[2-9][0-9]" LICENSE)
+export VERSION
+CONF ?= debug
+
+BIN := build/bin
+OBJ := build/obj
+INC := build/include/sameboy
+LIBDIR := build/lib
+
+BOOTROMS_DIR ?= $(BIN)/BootROMs
+
+ifdef DATA_DIR
+CFLAGS += -DDATA_DIR="\"$(DATA_DIR)\""
+endif
+
+# Set tools
+
+# Use clang if it's available.
+ifeq ($(origin CC),default)
+ifneq (, $(shell which clang 2> $(NULL)))
+CC := clang 
+endif
+endif
+
+# Find libraries with pkg-config if available.
+ifneq (, $(shell which pkg-config 2> $(NULL)))
+# But not on macOS, it's annoying
+ifneq ($(PLATFORM),Darwin)
+PKG_CONFIG := pkg-config
+endif
+endif
+
+ifeq ($(PLATFORM),windows32)
+# To force use of the Unix version instead of the Windows version
+MKDIR := $(shell which mkdir)
+else
+MKDIR := mkdir
+endif
+
+ifeq ($(CONF),native_release)
+override CONF := release
+LDFLAGS += -march=native -mtune=native
+CFLAGS += -march=native -mtune=native
+endif
+
+ifeq ($(CONF),fat_release)
+override CONF := release
+FAT_FLAGS += -arch x86_64 -arch arm64
+endif
+
+IOS_MIN := 11.0
+
+IOS_PNGS := $(shell ls iOS/*.png)
+# Support out-of-PATH RGBDS
+RGBASM  := $(RGBDS)rgbasm
+RGBLINK := $(RGBDS)rgblink
+RGBGFX  := $(RGBDS)rgbgfx
+
+# RGBASM 0.7+ deprecate and remove `-h`
+RGBASM_FLAGS := $(if $(filter $(shell echo 'println __RGBDS_MAJOR__ || (!__RGBDS_MAJOR__ && __RGBDS_MINOR__ > 6)' | $(RGBASM) -), $$0), -h,) --include $(OBJ)/BootROMs/ --include BootROMs/
+# RGBGFX 0.6+ replace `-h` with `-Z`, and need `-c embedded`
+RGBGFX_FLAGS := $(if $(filter $(shell echo 'println __RGBDS_MAJOR__ || (!__RGBDS_MAJOR__ && __RGBDS_MINOR__ > 5)' | $(RGBASM) -), $$0), -h -u, -Z -u -c embedded)
+
+
+# Set compilation and linkage flags based on target, platform and configuration
+
+OPEN_DIALOG = OpenDialog/gtk.c
+
+ifeq ($(PLATFORM),windows32)
+OPEN_DIALOG = OpenDialog/windows.c
+endif
+
+ifeq ($(PLATFORM),Darwin)
+OPEN_DIALOG = OpenDialog/cocoa.m
+endif
+
+# These must come before the -Wno- flags
+WARNINGS += -Werror -Wall -Wno-unknown-warning -Wno-unknown-warning-option -Wno-missing-braces
+WARNINGS += -Wno-nonnull -Wno-unused-result -Wno-multichar -Wno-int-in-bool-context -Wno-format-truncation
+
+# Only add this flag if the compiler supports it
+ifeq ($(shell $(CC) -x c -c $(NULL) -o $(NULL) -Werror -Wpartial-availability 2> $(NULL); echo $$?),0)
+WARNINGS += -Wpartial-availability
+endif
+
+# GCC's implementation of this warning has false positives, so we skip it
+ifneq ($(shell $(CC) --version 2>&1 | grep "gcc"), )
+WARNINGS += -Wno-maybe-uninitialized
+endif
+
+CFLAGS += $(WARNINGS)
+
+CFLAGS += -std=gnu11 -D_GNU_SOURCE -DGB_VERSION='"$(VERSION)"' -DGB_COPYRIGHT_YEAR='"$(COPYRIGHT_YEAR)"' -I. -D_USE_MATH_DEFINES
+ifneq (,$(UPDATE_SUPPORT))
+CFLAGS += -DUPDATE_SUPPORT
+endif
+
+ifeq (,$(PKG_CONFIG))
+SDL_CFLAGS := $(shell sdl2-config --cflags)
+SDL_LDFLAGS := $(shell sdl2-config --libs) -lpthread
+
+# We cannot detect the presence of OpenAL dev headers,
+# so we must do this manually
+ifeq ($(ENABLE_OPENAL),1)
+SDL_CFLAGS += -DENABLE_OPENAL
+ifeq ($(PLATFORM),Darwin)
+SDL_LDFLAGS += -framework OpenAL
+else
+SDL_LDFLAGS += -lopenal
+endif
+SDL_AUDIO_DRIVERS += openal
+endif
+else
+SDL_CFLAGS := $(shell $(PKG_CONFIG) --cflags sdl2)
+SDL_LDFLAGS := $(shell $(PKG_CONFIG) --libs sdl2) -lpthread
+
+# Allow OpenAL to be disabled even if the development libraries are available
+ifneq ($(ENABLE_OPENAL),0)
+ifeq ($(shell $(PKG_CONFIG) --exists openal && echo 0),0)
+SDL_CFLAGS += $(shell $(PKG_CONFIG) --cflags openal) -DENABLE_OPENAL
+SDL_LDFLAGS += $(shell $(PKG_CONFIG) --libs openal)
+SDL_AUDIO_DRIVERS += openal
+endif
+endif
+endif
+
+ifeq (,$(PKG_CONFIG))
+GL_LDFLAGS := -lGL
+else
+GL_CFLAGS := $(shell $(PKG_CONFIG) --cflags gl)
+GL_LDFLAGS := $(shell $(PKG_CONFIG) --libs gl || echo -lGL)
+endif
+
+ifeq ($(PLATFORM),windows32)
+CFLAGS += -IWindows -Drandom=rand --target=x86_64-pc-windows
+LDFLAGS += -lmsvcrt -lcomdlg32 -luser32 -lshell32 -lole32 -lSDL2main -Wl,/MANIFESTFILE:NUL --target=x86_64-pc-windows
+SDL_LDFLAGS := -lSDL2
+GL_LDFLAGS := -lopengl32
+ifneq ($(REDIST_XAUDIO),)
+CFLAGS += -DREDIST_XAUDIO
+LDFLAGS += -lxaudio2_9redist
+sdl: $(BIN)/SDL/xaudio2_9redist.dll
+endif
+else
+LDFLAGS += -lc -lm -ldl
+endif
+
+ifeq ($(MAKECMDGOALS),_ios)
+OBJ := build/obj-ios
+SYSROOT := $(shell xcodebuild -sdk iphoneos -version Path 2> $(NULL))
+ifeq ($(SYSROOT),)
+$(error Could not find an iOS SDK)
+endif
+CFLAGS += -arch arm64 -miphoneos-version-min=$(IOS_MIN) -isysroot $(SYSROOT) -IAppleCommon -DGB_DISABLE_DEBUGGER
+CORE_FILTER += Core/debugger.c Core/sm83_disassembler.c Core/symbol_hash.c
+LDFLAGS += -arch arm64
+OCFLAGS += -x objective-c -fobjc-arc -Wno-deprecated-declarations -isysroot $(SYSROOT)
+LDFLAGS += -miphoneos-version-min=$(IOS_MIN)  -isysroot $(SYSROOT)
+IOS_INSTALLER_LDFLAGS := $(LDFLAGS) -lobjc -framework CoreServices -framework Foundation
+LDFLAGS += -lobjc -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework AudioToolbox -framework AVFoundation -framework QuartzCore -framework CoreMotion -framework CoreVideo -framework CoreMedia -framework CoreImage -framework UserNotifications -framework GameController -weak_framework CoreHaptics -framework MobileCoreServices
+CODESIGN := codesign -fs -
+else
+ifeq ($(PLATFORM),Darwin)
+SYSROOT := $(shell xcodebuild -sdk macosx -version Path 2> $(NULL))
+ifeq ($(SYSROOT),)
+SYSROOT := /Library/Developer/CommandLineTools/SDKs/$(shell ls /Library/Developer/CommandLineTools/SDKs/ | grep "[0-9]\." | tail -n 1)
+endif
+ifeq ($(SYSROOT),/Library/Developer/CommandLineTools/SDKs/)
+$(error Could not find a macOS SDK)
+endif
+
+CFLAGS += -F/Library/Frameworks -mmacosx-version-min=10.9 -isysroot $(SYSROOT) -IAppleCommon
+OCFLAGS += -x objective-c -fobjc-arc -Wno-deprecated-declarations -isysroot $(SYSROOT)
+LDFLAGS += -framework AppKit -mmacosx-version-min=10.9 -isysroot $(SYSROOT)
+GL_LDFLAGS := -framework OpenGL
+endif
+CFLAGS += -Wno-deprecated-declarations
+ifeq ($(PLATFORM),windows32)
+CFLAGS += -Wno-deprecated-declarations # Seems like Microsoft deprecated every single LIBC function
+LDFLAGS += -Wl,/NODEFAULTLIB:libcmt.lib
+endif
+endif
+
+LIBFLAGS := -nostdlib -Wl,-r
+ifneq ($(PLATFORM),Darwin)
+LIBFLAGS += -no-pie
+endif
+
+ifeq ($(CONF),debug)
+CFLAGS += -g
+else ifeq ($(CONF), release)
+CFLAGS += -O3 -ffast-math -DNDEBUG
+# The frontend code is not time-critical, prefer reducing the size for less memory use and better cache utilization 
+ifeq ($(shell $(CC) -x c -c $(NULL) -o $(NULL) -Werror -Oz 2> $(NULL); echo $$?),0)
+FRONTEND_CFLAGS += -Oz
+else
+FRONTEND_CFLAGS += -Os
+endif
+
+# Don't use function outlining. I breaks Obj-C ARC optimizations and Apple never bothered to fix it. It also hardly has any effect on file size.
+ifeq ($(shell $(CC) -x c -c $(NULL) -o $(NULL) -Werror -mno-outline 2> $(NULL); echo $$?),0)
+FRONTEND_CFLAGS += -mno-outline
+LDFLAGS += -mno-outline
+endif
+
+STRIP := strip
+CODESIGN := true
+ifeq ($(PLATFORM),Darwin)
+LDFLAGS += -Wl,-exported_symbols_list,$(NULL)
+STRIP := strip -x
+CODESIGN := codesign -fs -
+endif
+ifeq ($(PLATFORM),windows32)
+LDFLAGS +=  -fuse-ld=lld
+endif
+LDFLAGS += -flto
+CFLAGS += -flto
+LDFLAGS += -Wno-lto-type-mismatch # For GCC's LTO
+
+else
+$(error Invalid value for CONF: $(CONF). Use "debug", "release" or "native_release")
+endif
+
+
+
+# Define our targets
+
+ifeq ($(PLATFORM),windows32)
+SDL_TARGET := $(BIN)/SDL/sameboy.exe $(BIN)/SDL/sameboy_debugger.exe $(BIN)/SDL/SDL2.dll
+TESTER_TARGET := $(BIN)/tester/sameboy_tester.exe
+else
+SDL_TARGET := $(BIN)/SDL/sameboy
+TESTER_TARGET := $(BIN)/tester/sameboy_tester
+endif
+
+cocoa: $(BIN)/SameBoy.app
+quicklook: $(BIN)/SameBoy.qlgenerator
+sdl: $(SDL_TARGET) $(BIN)/SDL/dmg_boot.bin $(BIN)/SDL/mgb_boot.bin $(BIN)/SDL/cgb0_boot.bin $(BIN)/SDL/cgb_boot.bin $(BIN)/SDL/agb_boot.bin $(BIN)/SDL/sgb_boot.bin $(BIN)/SDL/sgb2_boot.bin $(BIN)/SDL/LICENSE $(BIN)/SDL/registers.sym $(BIN)/SDL/background.bmp $(BIN)/SDL/Shaders $(BIN)/SDL/Palettes
+bootroms: $(BIN)/BootROMs/agb_boot.bin $(BIN)/BootROMs/cgb_boot.bin $(BIN)/BootROMs/cgb0_boot.bin $(BIN)/BootROMs/dmg_boot.bin $(BIN)/BootROMs/mgb_boot.bin $(BIN)/BootROMs/sgb_boot.bin $(BIN)/BootROMs/sgb2_boot.bin
+tester: $(TESTER_TARGET) $(BIN)/tester/dmg_boot.bin $(BIN)/tester/cgb_boot.bin $(BIN)/tester/agb_boot.bin $(BIN)/tester/sgb_boot.bin $(BIN)/tester/sgb2_boot.bin
+_ios: $(BIN)/SameBoy-iOS.app $(OBJ)/installer
+ios-ipa: $(BIN)/SameBoy-iOS.ipa
+ios-deb: $(BIN)/SameBoy-iOS.deb
+ifeq ($(PLATFORM),windows32)
+lib: lib-unsupported
+else
+lib: $(LIBDIR)/libsameboy.o $(LIBDIR)/libsameboy.a
+endif
+all: sdl tester libretro lib
+ifeq ($(PLATFORM),Darwin)
+all: cocoa ios-ipa ios-deb
+endif
+
+# Get a list of our source files and their respective object file targets
+
+CORE_SOURCES := $(filter-out $(CORE_FILTER),$(shell ls Core/*.c))
+CORE_HEADERS := $(shell ls Core/*.h)
+SDL_SOURCES := $(shell ls SDL/*.c) $(OPEN_DIALOG) $(patsubst %,SDL/audio/%.c,$(SDL_AUDIO_DRIVERS))
+TESTER_SOURCES := $(shell ls Tester/*.c)
+IOS_SOURCES := $(filter-out iOS/installer.m, $(shell ls iOS/*.m)) $(shell ls AppleCommon/*.m)
+COCOA_SOURCES := $(shell ls Cocoa/*.m) $(shell ls HexFiend/*.m) $(shell ls JoyKit/*.m) $(shell ls AppleCommon/*.m)
+QUICKLOOK_SOURCES := $(shell ls QuickLook/*.m) $(shell ls QuickLook/*.c)
+
+ifeq ($(PLATFORM),windows32)
+CORE_SOURCES += $(shell ls Windows/*.c)
+endif
+
+CORE_OBJECTS := $(patsubst %,$(OBJ)/%.o,$(CORE_SOURCES))
+PUBLIC_HEADERS := $(patsubst Core/%,$(INC)/%,$(CORE_HEADERS))
+COCOA_OBJECTS := $(patsubst %,$(OBJ)/%.o,$(COCOA_SOURCES))
+IOS_OBJECTS := $(patsubst %,$(OBJ)/%.o,$(IOS_SOURCES))
+QUICKLOOK_OBJECTS := $(patsubst %,$(OBJ)/%.o,$(QUICKLOOK_SOURCES))
+SDL_OBJECTS := $(patsubst %,$(OBJ)/%.o,$(SDL_SOURCES))
+TESTER_OBJECTS := $(patsubst %,$(OBJ)/%.o,$(TESTER_SOURCES))
+
+lib: $(PUBLIC_HEADERS)
+
+# Automatic dependency generation
+
+ifneq ($(filter-out ios ios-ipa ios-deb clean bootroms libretro %.bin, $(MAKECMDGOALS)),)
+-include $(CORE_OBJECTS:.o=.dep)
+ifneq ($(filter $(MAKECMDGOALS),sdl),)
+-include $(SDL_OBJECTS:.o=.dep)
+endif
+ifneq ($(filter $(MAKECMDGOALS),tester),)
+-include $(TESTER_OBJECTS:.o=.dep)
+endif
+ifneq ($(filter $(MAKECMDGOALS),cocoa),)
+-include $(COCOA_OBJECTS:.o=.dep)
+endif
+ifneq ($(filter $(MAKECMDGOALS),_ios),)
+-include $(IOS_OBJECTS:.o=.dep)
+endif
+endif
+
+$(OBJ)/SDL/%.dep: SDL/%
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) $(GL_CFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
+	
+$(OBJ)/OpenDialog/%.dep: OpenDialog/%
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) $(GL_CFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
+
+$(OBJ)/%.dep: %
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) -MT $(OBJ)/$^.o -M $^ -c -o $@
+
+# Compilation rules
+
+$(OBJ)/Core/%.c.o: Core/%.c
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(FAT_FLAGS) -DGB_INTERNAL -c $< -o $@
+
+$(OBJ)/SDL/%.c.o: SDL/%.c
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(FRONTEND_CFLAGS) $(FAT_FLAGS) $(SDL_CFLAGS) $(GL_CFLAGS) -c $< -o $@
+
+$(OBJ)/OpenDialog/%.c.o: OpenDialog/%.c
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(FRONTEND_CFLAGS) $(FAT_FLAGS) $(SDL_CFLAGS) $(GL_CFLAGS) -c $< -o $@
+
+
+$(OBJ)/%.c.o: %.c
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(FRONTEND_CFLAGS) $(FAT_FLAGS) -c $< -o $@
+	
+# HexFiend requires more flags
+$(OBJ)/HexFiend/%.m.o: HexFiend/%.m
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(FRONTEND_CFLAGS) $(FAT_FLAGS) $(OCFLAGS) -c $< -o $@ -fno-objc-arc -include HexFiend/HexFiend_2_Framework_Prefix.pch
+	
+$(OBJ)/%.m.o: %.m
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) $(FRONTEND_CFLAGS) $(FAT_FLAGS) $(OCFLAGS) -c $< -o $@
+    
+# iOS Port
+
+$(BIN)/SameBoy-iOS.app: $(BIN)/SameBoy-iOS.app/SameBoy \
+                        $(IOS_PNGS) \
+                        iOS/License.html \
+                        iOS/Info.plist \
+                        $(BIN)/SameBoy-iOS.app/dmg_boot.bin \
+                        $(BIN)/SameBoy-iOS.app/mgb_boot.bin \
+                        $(BIN)/SameBoy-iOS.app/cgb0_boot.bin \
+                        $(BIN)/SameBoy-iOS.app/cgb_boot.bin \
+                        $(BIN)/SameBoy-iOS.app/agb_boot.bin \
+                        $(BIN)/SameBoy-iOS.app/sgb_boot.bin \
+                        $(BIN)/SameBoy-iOS.app/sgb2_boot.bin \
+						$(BIN)/SameBoy-iOS.app/LaunchScreen.storyboardc \
+                        Shaders
+	$(MKDIR) -p $(BIN)/SameBoy-iOS.app
+	cp $(IOS_PNGS) $(BIN)/SameBoy-iOS.app
+	sed "s/@VERSION/$(VERSION)/;s/@COPYRIGHT_YEAR/$(COPYRIGHT_YEAR)/" < iOS/Info.plist > $(BIN)/SameBoy-iOS.app/Info.plist
+	sed "s/@COPYRIGHT_YEAR/$(COPYRIGHT_YEAR)/" < iOS/License.html > $(BIN)/SameBoy-iOS.app/License.html
+	$(MKDIR) -p $(BIN)/SameBoy-iOS.app/Shaders
+	cp Shaders/*.fsh Shaders/*.metal $(BIN)/SameBoy-iOS.app/Shaders
+	$(CODESIGN) $@
+
+$(BIN)/SameBoy-iOS.app/SameBoy: $(CORE_OBJECTS) $(IOS_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS)
+ifeq ($(CONF), release)
+	$(STRIP) $@
+endif
+
+$(OBJ)/installer: iOS/installer.m
+	$(CC) $< -o $@ $(IOS_INSTALLER_LDFLAGS) $(CFLAGS)
+
+# Cocoa Port
+
+$(BIN)/SameBoy.app: $(BIN)/SameBoy.app/Contents/MacOS/SameBoy \
+                    $(shell ls Cocoa/*.icns Cocoa/*.png) \
+                    Cocoa/License.html \
+                    Cocoa/Info.plist \
+                    Misc/registers.sym \
+                    $(BIN)/SameBoy.app/Contents/Resources/dmg_boot.bin \
+                    $(BIN)/SameBoy.app/Contents/Resources/mgb_boot.bin \
+                    $(BIN)/SameBoy.app/Contents/Resources/cgb0_boot.bin \
+                    $(BIN)/SameBoy.app/Contents/Resources/cgb_boot.bin \
+                    $(BIN)/SameBoy.app/Contents/Resources/agb_boot.bin \
+                    $(BIN)/SameBoy.app/Contents/Resources/sgb_boot.bin \
+                    $(BIN)/SameBoy.app/Contents/Resources/sgb2_boot.bin \
+                    $(patsubst %.xib,%.nib,$(addprefix $(BIN)/SameBoy.app/Contents/Resources/,$(shell cd Cocoa;ls *.xib))) \
+                    $(BIN)/SameBoy.qlgenerator \
+                    Shaders
+	$(MKDIR) -p $(BIN)/SameBoy.app/Contents/Resources
+	cp Cocoa/*.icns Cocoa/*.png Misc/registers.sym $(BIN)/SameBoy.app/Contents/Resources/
+	sed "s/@VERSION/$(VERSION)/;s/@COPYRIGHT_YEAR/$(COPYRIGHT_YEAR)/" < Cocoa/Info.plist > $(BIN)/SameBoy.app/Contents/Info.plist
+	sed "s/@COPYRIGHT_YEAR/$(COPYRIGHT_YEAR)/" < Cocoa/License.html > $(BIN)/SameBoy.app/Contents/Resources/Credits.html
+	$(MKDIR) -p $(BIN)/SameBoy.app/Contents/Resources/Shaders
+	cp Shaders/*.fsh Shaders/*.metal $(BIN)/SameBoy.app/Contents/Resources/Shaders
+	$(MKDIR) -p $(BIN)/SameBoy.app/Contents/Library/QuickLook/
+	cp -rf $(BIN)/SameBoy.qlgenerator $(BIN)/SameBoy.app/Contents/Library/QuickLook/
+ifeq ($(CONF), release)
+	$(CODESIGN) $@
+endif
+
+$(BIN)/SameBoy.app/Contents/MacOS/SameBoy: $(CORE_OBJECTS) $(COCOA_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) -framework OpenGL -framework AudioUnit -framework AVFoundation -framework CoreVideo -framework CoreMedia -framework IOKit -framework PreferencePanes -framework Carbon -framework QuartzCore -framework Security -framework WebKit -weak_framework Metal -weak_framework MetalKit
+ifeq ($(CONF), release)
+	$(STRIP) $@
+endif
+
+$(BIN)/SameBoy.app/Contents/Resources/%.nib: Cocoa/%.xib
+	ibtool --target-device mac --minimum-deployment-target 10.9 --compile $@ $^ 2>&1 | cat -
+	
+$(BIN)/SameBoy-iOS.app/%.storyboardc: iOS/%.storyboard
+	ibtool --target-device iphone --target-device ipad --minimum-deployment-target $(IOS_MIN) --compile $@ $^ 2>&1 | cat -
+
+# Quick Look generator
+
+$(BIN)/SameBoy.qlgenerator: $(BIN)/SameBoy.qlgenerator/Contents/MacOS/SameBoyQL \
+                            $(shell ls QuickLook/*.png) \
+                            QuickLook/Info.plist \
+                            $(BIN)/SameBoy.qlgenerator/Contents/Resources/cgb_boot_fast.bin
+	$(MKDIR) -p $(BIN)/SameBoy.qlgenerator/Contents/Resources
+	cp QuickLook/*.png $(BIN)/SameBoy.qlgenerator/Contents/Resources/
+	sed "s/@VERSION/$(VERSION)/;s/@COPYRIGHT_YEAR/$(COPYRIGHT_YEAR)/" < QuickLook/Info.plist > $(BIN)/SameBoy.qlgenerator/Contents/Info.plist
+ifeq ($(CONF), release)
+	$(CODESIGN) $@
+endif
+
+# Currently, SameBoy.app includes two "copies" of each Core .o file once in the app itself and
+# once in the QL Generator. It should probably become a dylib instead.
+$(BIN)/SameBoy.qlgenerator/Contents/MacOS/SameBoyQL: $(CORE_OBJECTS) $(QUICKLOOK_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) -Wl,-exported_symbols_list,QuickLook/exports.sym -bundle -framework Cocoa -framework Quicklook
+ifeq ($(CONF), release)
+	$(STRIP) $@
+endif
+
+# cgb_boot_fast.bin is not a standard boot ROM, we don't expect it to exist in the user-provided
+# boot ROM directory.
+$(BIN)/SameBoy.qlgenerator/Contents/Resources/cgb_boot_fast.bin: $(BIN)/BootROMs/cgb_boot_fast.bin
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+	
+# SDL Port
+
+# Unix versions build only one binary
+$(BIN)/SDL/sameboy: $(CORE_OBJECTS) $(SDL_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS) $(FAT_FLAGS) $(SDL_LDFLAGS) $(GL_LDFLAGS)
+ifeq ($(CONF), release)
+	$(STRIP) $@
+	$(CODESIGN) $@
+endif
+
+# Windows version builds two, one with a conole and one without it
+$(BIN)/SDL/sameboy.exe: $(CORE_OBJECTS) $(SDL_OBJECTS) $(OBJ)/Windows/resources.o
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS) $(SDL_LDFLAGS) $(GL_LDFLAGS) -Wl,/subsystem:windows
+
+$(BIN)/SDL/sameboy_debugger.exe: $(CORE_OBJECTS) $(SDL_OBJECTS) $(OBJ)/Windows/resources.o
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS) $(SDL_LDFLAGS) $(GL_LDFLAGS) -Wl,/subsystem:console
+
+ifneq ($(USE_WINDRES),)
+$(OBJ)/%.o: %.rc
+	-@$(MKDIR) -p $(dir $@)
+	windres --preprocessor cpp -DVERSION=\"$(VERSION)\" -DCOPYRIGHT_YEAR=\"$(COPYRIGHT_YEAR)\" $^ $@
+else
+$(OBJ)/%.res: %.rc
+	-@$(MKDIR) -p $(dir $@)
+	rc /fo $@ /dVERSION=\"$(VERSION)\" /dCOPYRIGHT_YEAR=\"$(COPYRIGHT_YEAR)\" $^ 
+
+%.o: %.res
+	cvtres /OUT:"$@" $^
+endif
+
+# Copy required DLL files for the Windows port
+$(BIN)/SDL/%.dll:
+	-@$(MKDIR) -p $(dir $@)
+	@$(eval MATCH := $(shell where $$LIB:$(notdir $@)))
+	cp "$(MATCH)" $@
+
+# Tester
+
+$(BIN)/tester/sameboy_tester: $(CORE_OBJECTS) $(TESTER_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS)
+ifeq ($(CONF), release)
+	$(STRIP) $@
+	$(CODESIGN) $@
+endif
+
+$(BIN)/tester/sameboy_tester.exe: $(CORE_OBJECTS) $(SDL_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS) -Wl,/subsystem:console
+
+$(BIN)/SDL/%.bin: $(BOOTROMS_DIR)/%.bin
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(BIN)/tester/%.bin: $(BOOTROMS_DIR)/%.bin
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(BIN)/SameBoy.app/Contents/Resources/%.bin: $(BOOTROMS_DIR)/%.bin
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(BIN)/SameBoy-iOS.app/%.bin: $(BOOTROMS_DIR)/%.bin
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(BIN)/SDL/LICENSE: LICENSE
+	-@$(MKDIR) -p $(dir $@)
+	grep -v "^  " $^ > $@
+
+$(BIN)/SDL/registers.sym: Misc/registers.sym
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(BIN)/SDL/background.bmp: SDL/background.bmp
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(BIN)/SDL/Shaders: Shaders
+	-@$(MKDIR) -p $@
+	cp -rf Shaders/*.fsh $@
+    
+$(BIN)/SDL/Palettes: Misc/Palettes
+	-@$(MKDIR) -p $@
+	cp -rf Misc/Palettes/*.sbp $@
+
+# Boot ROMs
+
+$(OBJ)/%.2bpp: %.png
+	-@$(MKDIR) -p $(dir $@)
+	$(RGBGFX) $(RGBGFX_FLAGS) -o $@ $<
+
+$(OBJ)/BootROMs/SameBoyLogo.pb12: $(OBJ)/BootROMs/SameBoyLogo.2bpp $(PB12_COMPRESS)
+	-@$(MKDIR) -p $(dir $@)
+	"$(realpath $(PB12_COMPRESS))" < $< > $@
+	
+$(PB12_COMPRESS): BootROMs/pb12.c
+	-@$(MKDIR) -p $(dir $@)
+	$(NATIVE_CC) -std=c99 -Wall -Werror $< -o $@
+
+$(BIN)/BootROMs/cgb0_boot.bin: BootROMs/cgb_boot.asm
+$(BIN)/BootROMs/agb_boot.bin: BootROMs/cgb_boot.asm
+$(BIN)/BootROMs/cgb_boot_fast.bin: BootROMs/cgb_boot.asm
+$(BIN)/BootROMs/sgb2_boot.bin: BootROMs/sgb_boot.asm
+
+$(BIN)/BootROMs/%.bin: BootROMs/%.asm $(OBJ)/BootROMs/SameBoyLogo.pb12
+	-@$(MKDIR) -p $(dir $@)
+	$(RGBASM) $(RGBASM_FLAGS) -o $@.tmp $<
+	$(RGBLINK) -x -o $@ $@.tmp
+	@rm $@.tmp
+
+# Libretro Core (uses its own build system)
+libretro:
+	CFLAGS="$(WARNINGS)" $(MAKE) -C libretro BOOTROMS_DIR=$(abspath $(BOOTROMS_DIR)) BIN=$(abspath $(BIN))
+
+# install for Linux/FreeDesktop/etc.
+# Does not install mimetype icons because FreeDesktop is cursed abomination with no right to exist.
+# If you somehow find a reasonable way to make associate an icon with an extension in this dumpster
+# fire of a desktop environment, open an issue or a pull request
+ifneq ($(FREEDESKTOP),)
+ICON_NAMES := apps/sameboy mimetypes/x-gameboy-rom mimetypes/x-gameboy-color-rom
+ICON_SIZES := 16x16 32x32 64x64 128x128 256x256 512x512
+ICONS := $(foreach name,$(ICON_NAMES), $(foreach size,$(ICON_SIZES),$(DESTDIR)$(PREFIX)/share/icons/hicolor/$(size)/$(name).png))
+install: sdl $(DESTDIR)$(PREFIX)/share/mime/packages/sameboy.xml $(ICONS) FreeDesktop/sameboy.desktop
+	-@$(MKDIR) -p $(dir $(DESTDIR)$(PREFIX))
+	mkdir -p $(DESTDIR)$(DATA_DIR)/ $(DESTDIR)$(PREFIX)/bin/
+	cp -rf $(BIN)/SDL/* $(DESTDIR)$(DATA_DIR)/
+	mv $(DESTDIR)$(DATA_DIR)/sameboy $(DESTDIR)$(PREFIX)/bin/sameboy
+ifeq ($(DESTDIR),)
+	-update-mime-database -n $(PREFIX)/share/mime
+	-xdg-desktop-menu install --novendor --mode system FreeDesktop/sameboy.desktop
+	-xdg-icon-resource forceupdate --mode system
+	-xdg-desktop-menu forceupdate --mode system
+ifneq ($(SUDO_USER),)
+	-su $(SUDO_USER) -c "xdg-desktop-menu forceupdate --mode system"
+endif
+else
+	-@$(MKDIR) -p $(DESTDIR)$(PREFIX)/share/applications/
+	cp FreeDesktop/sameboy.desktop $(DESTDIR)$(PREFIX)/share/applications/sameboy.desktop
+endif
+
+$(DESTDIR)$(PREFIX)/share/icons/hicolor/%/apps/sameboy.png: FreeDesktop/AppIcon/%.png
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(DESTDIR)$(PREFIX)/share/icons/hicolor/%/mimetypes/x-gameboy-rom.png: FreeDesktop/Cartridge/%.png
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(DESTDIR)$(PREFIX)/share/icons/hicolor/%/mimetypes/x-gameboy-color-rom.png: FreeDesktop/ColorCartridge/%.png
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+
+$(DESTDIR)$(PREFIX)/share/mime/packages/sameboy.xml: FreeDesktop/sameboy.xml
+	-@$(MKDIR) -p $(dir $@)
+	cp -f $^ $@
+endif
+
+ios:
+	@$(MAKE) _ios
+    
+$(BIN)/SameBoy-iOS.ipa: ios iOS/sideload.entitlements
+	$(MKDIR) -p $(OBJ)/Payload
+	cp -rf $(BIN)/SameBoy-iOS.app $(OBJ)/Payload/SameBoy-iOS.app
+	codesign -fs - --entitlements iOS/sideload.entitlements $(OBJ)/Payload/SameBoy-iOS.app
+	(cd $(OBJ) && zip -q $(abspath $@) -r Payload)
+	rm -rf $(OBJ)/Payload
+
+    
+$(BIN)/SameBoy-iOS.deb: $(OBJ)/debian-binary $(OBJ)/control.tar.gz $(OBJ)/data.tar.gz
+	-@$(MKDIR) -p $(dir $@)
+	(cd $(OBJ) && ar cr $(abspath $@) $(notdir $^))
+	
+$(OBJ)/data.tar.gz: ios iOS/jailbreak.entitlements iOS/installer.entitlements
+	$(MKDIR) -p $(OBJ)/private/var/containers/
+	cp -rf $(BIN)/SameBoy-iOS.app $(OBJ)/private/var/containers/SameBoy-iOS.app
+	cp build/obj-ios/installer $(OBJ)/private/var/containers/SameBoy-iOS.app
+	codesign -fs - --entitlements iOS/installer.entitlements $(OBJ)/private/var/containers/SameBoy-iOS.app/installer
+	codesign -fs - --entitlements iOS/jailbreak.entitlements $(OBJ)/private/var/containers/SameBoy-iOS.app
+	(cd $(OBJ) && tar -czf $(abspath $@) --format ustar --uid 501 --gid 501 --numeric-owner ./private)
+	rm -rf $(OBJ)/private/
+	
+$(OBJ)/control.tar.gz: iOS/deb-postinst iOS/deb-prerm iOS/deb-control
+	-@$(MKDIR) -p $(dir $@)
+	sed "s/@VERSION/$(VERSION)/" < iOS/deb-control > $(OBJ)/control
+	ln iOS/deb-postinst $(OBJ)/postinst
+	ln iOS/deb-prerm $(OBJ)/prerm
+	(cd $(OBJ) && tar -czf $(abspath $@) --format ustar --uid 501 --gid 501 --numeric-owner ./control ./postinst ./prerm)
+	rm $(OBJ)/control $(OBJ)/postinst $(OBJ)/prerm
+	
+$(OBJ)/debian-binary:
+	-@$(MKDIR) -p $(dir $@)
+	echo 2.0 > $@
+    
+$(LIBDIR)/libsameboy.o: $(CORE_OBJECTS)
+	-@$(MKDIR) -p $(dir $@)
+	@# This is a somewhat simple hack to force Clang and GCC to build a native object file out of one or many LTO objects
+	echo "static const char __attribute__((used)) x=0;"| $(CC) $(filter-out -flto,$(CFLAGS)) -c -x c - -o $(OBJ)/lto_hack.o
+	@# And this is a somewhat complicated hack to invoke the correct LTO-enabled LD command in a mostly cross-platform nature
+	$(CC) $(FAT_FLAGS) $(CFLAGS) $(LIBFLAGS) $^ $(OBJ)/lto_hack.o -o $@
+	-@rm $(OBJ)/lto_hack.o
+    
+$(LIBDIR)/libsameboy.a: $(LIBDIR)/libsameboy.o
+	-@$(MKDIR) -p $(dir $@)
+	-@rm -f $@
+	ar -crs $@ $^
+	
+$(INC)/%.h: Core/%.h
+	-@$(MKDIR) -p $(dir $@)
+	-@# CPPP doesn't like multibyte characters, so we replace the single quote character before processing so it doesn't complain
+	sed "s/'/@SINGLE_QUOTE@/g" $^ | cppp $(CPPP_FLAGS) | sed "s/@SINGLE_QUOTE@/'/g" > $@
+
+lib-unsupported:
+	@echo Due to limitations of lld-link, compiling SameBoy as a library on Windows is not supported.
+	@false
+	
+# Clean
+clean:
+	rm -rf build
+
+.PHONY: libretro tester cocoa ios _ios ios-ipa ios-deb liblib-unsupported bootroms
