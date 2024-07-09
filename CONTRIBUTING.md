@@ -1,56 +1,54 @@
-# Contributing to Angel
-Welcome to [report Issues](https://github.com/Tencent/angel/issues) or [pull requests](https://github.com/Tencent/angel/pulls). It's recommended to read the following Contributing Guide first before contributing. 
+# Contributing
 
+## Setup
 
-## Issues
-We use Github Issues to track public bugs and feature requests.
+```sh
+git clone https://github.com/MaxHalford/prince
+cd prince
+poetry install
+poetry shell
+```
 
-### Search Known Issues First
-Please search the existing issues to see if any similar issue or feature request has already been filed. You should make sure your issue isn't redundant.
+Install the [pre-commit](https://pre-commit.com/) push hooks. This will run some code quality checks every time you push to GitHub.
 
-### Reporting New Issues
-If you open an issue, the more information the better. Such as detailed description, screenshot or video of your problem, logcat or code blocks for your crash.
+```sh
+pre-commit install --hook-type pre-push
+```
 
-## Pull Requests
-We strongly welcome your pull request to make Angel better. 
+You can optionally run `pre-commit` at any time as so:
 
-Ensure you have signed the [Contributor License Agreement (CLA).](master/CLA.md)
+```sh
+pre-commit run --all-files
+```
 
+## Unit tests
 
-### Branch Management
-There are three main branches here:
+Some unit tests call the FactoMineR package via rpy2; you have to install it:
 
-1. `master` branch.
+```sh
+Rscript -e 'install.packages("FactoMineR", repos="https://cloud.r-project.org")'
+```
 
-	(1). It is the latest (pre-)release branch. We use `master` for tags, with version number `1.0.0`, `1.1.0`, `1.2.0`...
+```sh
+pytest
+```
 
-	(2). **Don't submit any PR on `master` branch.**
-	
-2. `specific version` branchs. 
+## Building docs locally
 
-	(1).There is a `specific version` for each Angel version, such as `branch-1.0.0`, `branch-1.1.0`. It is our stable developing	 branch. After full testing, `specific version` branch will be merged to `master` branch for the next release.
+```sh
+make execute-notebooks
+make render-notebooks
+(cd docs && hugo serve)
+```
 
-	(2). **You are recommended to submit bugfix or feature PR on `specific version` branch.**
+## Deploy docs
 
+```sh
+gh workflow run hugo.yml
+```
 
-Normal bugfix or feature request should be submitted to `specific version` branch. After full testing, we will merge them to `master` branch for the next release. 
+## Release
 
-
-### Make Pull Requests
-The code team will monitor all pull request, we run some code check and test on it. After all tests passed, we will accecpt this PR. But it won't merge to `master` branch at once, which have some delay.
-
-Before submitting a pull request, please make sure the followings are done:
-
-1. Fork the repo and create your branch from `master` or `specific version`.
-2. Update code or documentation if you have changed APIs.
-3. Add the copyright notice to the top of any new files you've added.
-4. Check your code lints and checkstyles.
-5. Test and test again your code.
-6. Now, you can submit your pull request on  `specific version` branch.
-
-## Code Style Guide
-Use [Code Style](https://github.com/Tencent/angel/blob/master/dev/checkstyle.xml) for Java and Scala .
-
-## License
-By contributing to Angel, you agree that your contributions will be licensed
-under its [ Apache License, Version 2.0](https://github.com/Tencent/angel/blob/master/LICENSE)
+```sh
+poetry publish --build
+```
