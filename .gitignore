@@ -1,13 +1,25 @@
-.ipynb_checkpoints
-.pytest_cache
-*.pyc
-tests/*.csv
-*.ipynb
-.venv
-.DS_Store
-docs/content/*.md
-!docs/content/_index.md
-!docs/content/*.ipynb
-dist
-public
+/pg_install
+/target
+/tmp_check
+/tmp_check_cli
+__pycache__/
+test_output/
 .vscode
+.idea
+neon.iml
+/.neon
+/integration_tests/.neon
+compaction-suite-results.*
+
+# Coverage
+*.profraw
+*.profdata
+
+*.key
+*.crt
+*.o
+*.so
+*.Po
+
+# pgindent typedef lists
+*.list
