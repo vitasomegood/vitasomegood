@@ -1,84 +1,196 @@
-# How to contribute
+Contribution Guidelines
+=======================
 
-Howdy! Usual good software engineering practices apply. Write
-tests. Write comments. Follow standard Rust coding practices where
-possible. Use `cargo fmt` and `cargo clippy` to tidy up formatting.
+In order to contribute to mGBA, there are a few things to be mindful of so as to ease the process.
 
-There are soft spots in the code, which could use cleanup,
-refactoring, additional comments, and so forth. Let's try to raise the
-bar, and clean things up as we go. Try to leave code in a better shape
-than it was before.
+Filing issues
+-------------
+New issues should be filed on the [mGBA GitHub Issues tracker](http://mgba.io/i/). When filing issues, please include the following information:
 
-## Pre-commit hook
+* The build you are using. For recent builds, this is visible in the title bar. For example, `0.3-2134-4ec19aa`. On older builds, such as 0.2.1, this is not present, so please specify the version you downloaded or built. If present, this contains the version, branch name (if not `master`), a revision number and a truncated revision hash. For this example, it means that it's version 0.3, on `master`, commit number 2134 and revision hash `4ec19aa`. Additionally, `-dirty` will be appended if there are local changes that haven't been commited.
+* The operating system you're using, for example Windows 7 32-bit or Ubuntu 15.04 64-bit.
+* Your CPU and graphics card (usually not necessary). For example, Core i5-3570K and AMD Radeon R9 280X.
 
-We have a sample pre-commit hook in `pre-commit.py`.
-To set it up, run:
+Please also describe the issue in as much detail as possible, including the name of the games you have reproduced the issue on, and how you managed to enter the buggy state. If applicable, savestates can be renamed to be .png files and attached to the issue directly.
 
-```bash
-ln -s ../../pre-commit.py .git/hooks/pre-commit
-```
+Filing pull requests
+--------------------
+When filing a pull request, please make sure you adhere to the coding style as outlined below, and are aware of the requirements for licensing. Furthermore, please make sure all commits in the pull request have coherent commit messages as well as the name of the component being modified in the commit message.
 
-This will run following checks on staged files before each commit:
-- `rustfmt`
-- checks for Python files, see [obligatory checks](/docs/sourcetree.md#obligatory-checks).
+Some components are as follows:
 
-There is also a separate script `./run_clippy.sh` that runs `cargo clippy` on the whole project
-and `./scripts/reformat` that runs all formatting tools to ensure the project is up to date.
+* ARM7: The ARM core
+* GBA: GBA code
+	* GBA Memory: Memory-specific
+	* GBA Video: Video, rendering
+	* GBA Audio: Audio processing
+	* GBA SIO: Serial I/O, multiplayer, link
+	* GBA Hardware: Extra devices, e.g. gyro, light sensor
+	* GBA RR: Rerecording features
+	* GBA Thread: Thread-layer abstractions
+	* GBA BIOS: High-level BIOS
+* Qt: Qt port-related code
+* SDL: SDL port-related code (including as used in other ports)
+* Video: Video recording code
+* Util: Common utility code
+* Tools: Miscellaneous tools
+* Debugger: Included debugging functionality
+* All: Changes that don't touch specific components but affect the project overall
 
-If you want to skip the hook, run `git commit` with `--no-verify` option.
 
-## Submitting changes
+Coding Style
+------------
+mGBA aims to have a consistent, clean codebase, so when contributing code to mGBA, please adhere to the following rules. If a pull request has style errors, you will be asked to fix them before the PR will be accepted.
 
-1. Get at least one +1 on your PR before you push.
+### Naming
 
-   For simple patches, it will only take a minute for someone to review
-it.
+Variable names, including parameters, should all be in camelCase. File-scoped static variables must start with an underscore.
 
-2. Don't force push small changes after making the PR ready for review.
-Doing so will force readers to re-read your entire PR, which will delay
-the review process.
+C struct names should start with a capital letter, and functions relating to these structs should start with the name of the class (including the capital letter) and be in camelCase after. C struct should not be `typedef`ed.
 
-3. Always keep the CI green.
+Functions not associated with structs should be in camelCase throughout. Static functions not associated with structs must start with an underscore.
 
-   Do not push, if the CI failed on your PR. Even if you think it's not
-your patch's fault. Help to fix the root cause if something else has
-broken the CI, before pushing.
+Enum values and `#define`s should be all caps with underscores.
 
-*Happy Hacking!*
+Good:
 
-# How to run a CI pipeline on Pull Requests from external contributors
-_An instruction for maintainers_
+	static int _localVariable;
 
-## TL;DR:
-- Review the PR
-- If and only if it looks **safe** (i.e. it doesn't contain any malicious code which could expose secrets or harm the CI), then:
-    - Press the "Approve and run" button in GitHub UI
-    - Add the `approved-for-ci-run` label to the PR
-    - Currently draft PR will skip e2e test (only for internal contributors). After turning the PR 'Ready to Review' CI will trigger e2e test
-      - Add `run-e2e-tests-in-draft` label to run e2e test in draft PR (override above behaviour)
-      - The `approved-for-ci-run` workflow will add `run-e2e-tests-in-draft` automatically to run e2e test for external contributors
+	struct LocalStruct {
+		void (*methodName)(struct LocalStruct struct, param);
 
-Repeat all steps after any change to the PR.
-- When the changes are ready to get merged — merge the original PR (not the internal one)
+		int memberName;
+	};
 
-## Longer version:
+	enum {
+		ENUM_ITEM_1,
+		ENUM_ITEM_2
+	};
 
-GitHub Actions triggered by the `pull_request` event don't share repository secrets with the forks (for security reasons).
-So, passing the CI pipeline on Pull Requests from external contributors is impossible.
+	void LocalStructCreate(struct LocalStruct* struct);
+	
+	void functionName(int argument);
 
-We're using the following approach to make it work:
-- After the review, assign the `approved-for-ci-run` label to the PR if changes look safe
-- A GitHub Action will create an internal branch and a new PR with the same changes (for example, for a PR `#1234`, it'll be a branch `ci-run/pr-1234`)
-- Because the PR is created from the internal branch, it is able to access repository secrets (that's why it's crucial to make sure that the PR doesn't contain any malicious code that could expose our secrets or intentionally harm the CI)
-- The label gets removed automatically, so to run CI again with new changes, the label should be added again (after the review)
+	static void _LocalStructUse(struct LocalStruct* struct);
+	static void _function2(int argument2);
 
-For details see [`approved-for-ci-run.yml`](.github/workflows/approved-for-ci-run.yml)
+C++ classes should be confined to namespaces. For the Qt port, this namespace is called `QGBA`.
 
-## How do I make build-tools image "pinned"
+Class names should be handled similarly to C structs. Fields should be prefixed according to their scoping:
 
-It's possible to update the `pinned` tag of the `build-tools` image using the `pin-build-tools-image.yml` workflow.
+* `m_` for non-static member.
+* `s_` for static member.
 
-```bash
-gh workflow -R neondatabase/neon run pin-build-tools-image.yml \
-            -f from-tag=cc98d9b00d670f182c507ae3783342bd7e64c31e
-```
+### Braces
+
+Braces do not go on their own lines, apart from the terminating brace. There should be a single space between the condition clause and the brace. Furthermore, braces must be used even for single-line blocks.
+
+Good:
+
+	if (condition) {
+		block;
+	} else if (condition2) {
+		block2;
+	} else {
+		block3;
+	}
+
+Bad (separate line):
+
+	if (condition)
+	{
+		block;
+	}
+	else if (condition2)
+	{
+		block2;
+	}
+	else
+	{
+		block3;
+	}
+
+Bad (missing braces):
+
+	if (condition)
+		statement;
+	else if (condition2)
+		statement2;
+	else
+		statement3;
+
+Bad (missing space):
+
+	if (condition){
+		block;
+	}
+
+### Spacing
+
+Indentation should be done using tabs and should match the level of braces. Alignment within a line should be done sparingly, but only done with spaces.
+
+### Header guards
+
+For C headers guards, the define should be the filename (including H), all-caps, with underscores instead of punctuation.
+
+Good:
+
+	#ifndef FILE_NAME_H
+	#define FILE_NAME_H
+
+	// Header
+
+	#endif
+
+There should be no comment on the `#endif`.
+
+For Qt (C++ header guards), the define should start with `QGBA_` and not include `_H`, but is otherwise the same. This is mostly for legacy reasons., and may change in the future.
+
+Good:
+
+	#ifndef QGBA_FILE_NAME
+	#define QGBA_FILE_NAME
+	
+	// Header
+	
+	#endif
+
+### Other
+
+Block statements such as `if`, `while` and `for` should have a space between the type of block and the parenthesis.
+
+Good:
+
+	while (condition) {
+		block;
+	}
+
+Bad:
+
+	while(condition) {
+		block;
+	}
+
+In C code, use `0` instead of `NULL`. This is mostly for legacy reasons and may change in the future. C code should also use `bool` types and values `true` and `false` instead of `1` and `0` where applicable. In C++ code, use `nullptr` instead of `NULL` or `0`.
+
+If a statement has no body, putting braces is not required, and a semicolon can be used. This is not required, but is suggested.
+
+Good:
+
+	while (f());
+
+Bad:
+
+	while (f()) {}
+
+
+For infinite loops that `break` statements internally, `while (true)` is preferred over `for (;;)`.
+
+Licensing
+---------
+
+mGBA is licensed under the [Mozilla Public License version 2.0](https://www.mozilla.org/MPL/2.0/). This entails a few things when it comes to adding code to mGBA.
+
+* New code to mGBA will be licensed under the MPL 2.0 license.
+* GPL-licensed code cannot be added to mGBA upstream, but can be linked with mGBA when compiled.
+* MIT, BSD, CC0, etc., code can be added to mGBA upstream, but preferably in the `third-party` section if applicable.

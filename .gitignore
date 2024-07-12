@@ -1,25 +1,33 @@
-/pg_install
-/target
-/tmp_check
-/tmp_check_cli
-__pycache__/
-test_output/
-.vscode
-.idea
-neon.iml
-/.neon
-/integration_tests/.neon
-compaction-suite-results.*
+# Generic files
+*.user*
+*~
+*.swp
+*.pyc
 
-# Coverage
-*.profraw
-*.profdata
+# Build directories
+/build
+/build-*
+/.vs
 
-*.key
-*.crt
+# Build files
+*.a
+*.dylib
+*.dll
+*.lib
+*.exe
 *.o
 *.so
-*.Po
+CMakeCache.txt
+CMakeFiles
+CMakeSettings.json
+CMakeUserPresets.json
+compile_commands.json
+/.cache
+/.vscode
+cmake_install.cmake
+hle-bios.bin
+version.c
 
-# pgindent typedef lists
-*.list
+# Runtime generated cruft
+*.sav
+*.ss0

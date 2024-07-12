@@ -1,315 +1,268 @@
-[![Neon](https://github.com/neondatabase/neon/assets/11527560/f15a17f0-836e-40c5-b35d-030606a6b660)](https://neon.tech)
+mGBA
+====
+
+mGBA is an emulator for running Game Boy Advance games. It aims to be faster and more accurate than many existing Game Boy Advance emulators, as well as adding features that other emulators lack. It also supports Game Boy and Game Boy Color games.
+
+Up-to-date news and downloads can be found at [mgba.io](https://mgba.io/).
+
+[![Build status](https://buildbot.mgba.io/badges/build-win32.svg)](https://buildbot.mgba.io)
+[![Translation status](https://hosted.weblate.org/widgets/mgba/-/svg-badge.svg)](https://hosted.weblate.org/engage/mgba)
+
+Features
+--------
+
+- Highly accurate Game Boy Advance hardware support[<sup>[1]</sup>](#missing).
+- Game Boy/Game Boy Color hardware support.
+- Fast emulation. Known to run at full speed even on low end hardware, such as netbooks.
+- Qt and SDL ports for a heavy-weight and a light-weight frontend.
+- Local (same computer) link cable support.
+- Save type detection, even for flash memory size[<sup>[2]</sup>](#flashdetect).
+- Support for cartridges with motion sensors and rumble (only usable with game controllers).
+- Real-time clock support, even without configuration.
+- Solar sensor support for Boktai games.
+- Game Boy Camera and Game Boy Printer support.
+- A built-in BIOS implementation, and ability to load external BIOS files.
+- Scripting support using Lua.
+- Turbo/fast-forward support by holding Tab.
+- Rewind by holding Backquote.
+- Frameskip, configurable up to 10.
+- Screenshot support.
+- Cheat code support.
+- 9 savestate slots. Savestates are also viewable as screenshots.
+- Video, GIF, WebP, and APNG recording.
+- e-Reader support.
+- Remappable controls for both keyboards and gamepads.
+- Loading from ZIP and 7z files.
+- IPS, UPS and BPS patch support.
+- Game debugging via a command-line interface and GDB remote support, compatible with Ghidra and IDA Pro.
+- Configurable emulation rewinding.
+- Support for loading and exporting GameShark and Action Replay snapshots.
+- Cores available for RetroArch/Libretro and OpenEmu.
+- Community-provided translations for several languages via [Weblate](https://hosted.weblate.org/engage/mgba).
+- Many, many smaller things.
+
+#### Game Boy mappers
+
+The following mappers are fully supported:
+
+- MBC1
+- MBC1M
+- MBC2
+- MBC3
+- MBC3+RTC
+- MBC30
+- MBC5
+- MBC5+Rumble
+- MBC7
+- Wisdom Tree (unlicensed)
+- NT "old type" 1 and 2 (unlicensed multicart)
+- NT "new type" (unlicensed MBC5-like)
+- Pokémon Jade/Diamond (unlicensed)
+- Sachen MMC1 (unlicensed)
+
+The following mappers are partially supported:
+
+- MBC6 (missing flash memory write support)
+- MMM01
+- Pocket Cam
+- TAMA5 (incomplete RTC support)
+- HuC-1 (missing IR support)
+- HuC-3 (missing IR support)
+- Sachen MMC2 (missing alternate wiring support)
+- BBD (missing logo switching)
+- Hitek (missing logo switching)
+- GGB-81 (missing logo switching)
+- Li Cheng (missing logo switching)
+
+### Planned features
+
+- Networked multiplayer link cable support.
+- Dolphin/JOY bus link cable support.
+- MP2k audio mixing, for higher quality sound than hardware.
+- Re-recording support for tool-assist runs.
+- A comprehensive debug suite.
+- Wireless adapter support.
 
+Supported Platforms
+-------------------
 
+- Windows 7 or newer
+- OS X 10.9 (Mavericks)[<sup>[3]</sup>](#osxver) or newer
+- Linux
+- FreeBSD
+- Nintendo 3DS
+- Nintendo Switch
+- Wii
+- PlayStation Vita
 
-# Neon
+Other Unix-like platforms, such as OpenBSD, are known to work as well, but are untested and not fully supported.
 
-Neon is a serverless open-source alternative to AWS Aurora Postgres. It separates storage and compute and substitutes the PostgreSQL storage layer by redistributing data across a cluster of nodes.
+### System requirements
 
-## Quick start
-Try the [Neon Free Tier](https://neon.tech/github) to create a serverless Postgres instance. Then connect to it with your preferred Postgres client (psql, dbeaver, etc) or use the online [SQL Editor](https://neon.tech/docs/get-started-with-neon/query-with-neon-sql-editor/). See [Connect from any application](https://neon.tech/docs/connect/connect-from-any-app/) for connection instructions.
+Requirements are minimal. Any computer that can run Windows Vista or newer should be able to handle emulation. Support for OpenGL 1.1 or newer is also required, with OpenGL 3.2 or newer for shaders and advanced features.
 
-Alternatively, compile and run the project [locally](#running-local-installation).
+Downloads
+---------
 
-## Architecture overview
+Downloads can be found on the official website, in the [Downloads][downloads] section. The source code can be found on [GitHub][source].
 
-A Neon installation consists of compute nodes and the Neon storage engine. Compute nodes are stateless PostgreSQL nodes backed by the Neon storage engine.
+Controls
+--------
 
-The Neon storage engine consists of two major components:
-- Pageserver: Scalable storage backend for the compute nodes.
-- Safekeepers: The safekeepers form a redundant WAL service that received WAL from the compute node, and stores it durably until it has been processed by the pageserver and uploaded to cloud storage.
+Controls are configurable in the settings menu. Many game controllers should be automatically mapped by default. The default keyboard controls are as follows:
 
-See developer documentation in [SUMMARY.md](/docs/SUMMARY.md) for more information.
+- **A**: X
+- **B**: Z
+- **L**: A
+- **R**: S
+- **Start**: Enter
+- **Select**: Backspace
 
-## Running local installation
+Compiling
+---------
 
+Compiling requires using CMake 3.1 or newer. GCC, Clang, and Visual Studio 2019 are known to work for compiling mGBA.
 
-#### Installing dependencies on Linux
-1. Install build dependencies and other applicable packages
+#### Docker building
 
-* On Ubuntu or Debian, this set of packages should be sufficient to build the code:
-```bash
-apt install build-essential libtool libreadline-dev zlib1g-dev flex bison libseccomp-dev \
-libssl-dev clang pkg-config libpq-dev cmake postgresql-client protobuf-compiler \
-libcurl4-openssl-dev openssl python3-poetry lsof libicu-dev
-```
-* On Fedora, these packages are needed:
-```bash
-dnf install flex bison readline-devel zlib-devel openssl-devel \
-  libseccomp-devel perl clang cmake postgresql postgresql-contrib protobuf-compiler \
-  protobuf-devel libcurl-devel openssl poetry lsof libicu-devel libpq-devel python3-devel \
-  libffi-devel
-```
-* On Arch based systems, these packages are needed:
-```bash
-pacman -S base-devel readline zlib libseccomp openssl clang \
-postgresql-libs cmake postgresql protobuf curl lsof
-```
+The recommended way to build for most platforms is to use Docker. Several Docker images are provided that contain the requisite toolchain and dependencies for building mGBA across several platforms.
 
-Building Neon requires 3.15+ version of `protoc` (protobuf-compiler). If your distribution provides an older version, you can install a newer version from [here](https://github.com/protocolbuffers/protobuf/releases).
+Note: If you are on an older Windows system before Windows 10, you may need to configure your Docker to use VirtualBox shared folders to correctly map your current `mgba` checkout directory to the Docker image's working directory. (See issue [#1985](https://mgba.io/i/1985) for details.)
 
-2. [Install Rust](https://www.rust-lang.org/tools/install)
-```
-# recommended approach from https://www.rust-lang.org/tools/install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+To use a Docker image to build mGBA, simply run the following command while in the root of an mGBA checkout:
 
-#### Installing dependencies on macOS (12.3.1)
-1. Install XCode and dependencies
-```
-xcode-select --install
-brew install protobuf openssl flex bison icu4c pkg-config
+	docker run --rm -it -v ${PWD}:/home/mgba/src mgba/windows:w32
 
-# add openssl to PATH, required for ed25519 keys generation in neon_local
-echo 'export PATH="$(brew --prefix openssl)/bin:$PATH"' >> ~/.zshrc
-```
+After starting the Docker container, it will produce a `build-win32` directory with the build products. Replace `mgba/windows:w32` with another Docker image for other platforms, which will produce a corresponding other directory. The following Docker images available on Docker Hub:
 
-2. [Install Rust](https://www.rust-lang.org/tools/install)
-```
-# recommended approach from https://www.rust-lang.org/tools/install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+- mgba/3ds
+- mgba/switch
+- mgba/ubuntu:xenial
+- mgba/ubuntu:bionic
+- mgba/ubuntu:focal
+- mgba/ubuntu:groovy
+- mgba/vita
+- mgba/wii
+- mgba/windows:w32
+- mgba/windows:w64
 
-3. Install PostgreSQL Client
-```
-# from https://stackoverflow.com/questions/44654216/correct-way-to-install-psql-without-full-postgres-on-macos
-brew install libpq
-brew link --force libpq
-```
+If you want to speed up the build process, consider adding the flag `-e MAKEFLAGS=-jN` to do a parallel build for mGBA with `N` number of CPU cores.
 
-#### Rustc version
+#### *nix building
 
-The project uses [rust toolchain file](./rust-toolchain.toml) to define the version it's built with in CI for testing and local builds.
+To use CMake to build on a Unix-based system, the recommended commands are as follows:
 
-This file is automatically picked up by [`rustup`](https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file) that installs (if absent) and uses the toolchain version pinned in the file.
+	mkdir build
+	cd build
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
+	make
+	sudo make install
 
-rustup users who want to build with another toolchain can use the [`rustup override`](https://rust-lang.github.io/rustup/overrides.html#directory-overrides) command to set a specific toolchain for the project's directory.
-
-non-rustup users most probably are not getting the same toolchain automatically from the file, so are responsible to manually verify that their toolchain matches the version in the file.
-Newer rustc versions most probably will work fine, yet older ones might not be supported due to some new features used by the project or the crates.
-
-#### Building on Linux
-
-1. Build neon and patched postgres
-```
-# Note: The path to the neon sources can not contain a space.
-
-git clone --recursive https://github.com/neondatabase/neon.git
-cd neon
-
-# The preferred and default is to make a debug build. This will create a
-# demonstrably slower build than a release build. For a release build,
-# use "BUILD_TYPE=release make -j`nproc` -s"
-# Remove -s for the verbose build log
-
-make -j`nproc` -s
-```
-
-#### Building on OSX
-
-1. Build neon and patched postgres
-```
-# Note: The path to the neon sources can not contain a space.
-
-git clone --recursive https://github.com/neondatabase/neon.git
-cd neon
-
-# The preferred and default is to make a debug build. This will create a
-# demonstrably slower build than a release build. For a release build,
-# use "BUILD_TYPE=release make -j`sysctl -n hw.logicalcpu` -s"
-# Remove -s for the verbose build log
-
-make -j`sysctl -n hw.logicalcpu` -s
-```
-
-#### Dependency installation notes
-To run the `psql` client, install the `postgresql-client` package or modify `PATH` and `LD_LIBRARY_PATH` to include `pg_install/bin` and `pg_install/lib`, respectively.
-
-To run the integration tests or Python scripts (not required to use the code), install
-Python (3.9 or higher), and install the python3 packages using `./scripts/pysync` (requires [poetry>=1.3](https://python-poetry.org/)) in the project directory.
-
-
-#### Running neon database
-1. Start pageserver and postgres on top of it (should be called from repo root):
-```sh
-# Create repository in .neon with proper paths to binaries and data
-# Later that would be responsibility of a package install script
-> cargo neon init
-Initializing pageserver node 1 at '127.0.0.1:64000' in ".neon"
-
-# start pageserver, safekeeper, and broker for their intercommunication
-> cargo neon start
-Starting neon broker at 127.0.0.1:50051.
-storage_broker started, pid: 2918372
-Starting pageserver node 1 at '127.0.0.1:64000' in ".neon".
-pageserver started, pid: 2918386
-Starting safekeeper at '127.0.0.1:5454' in '.neon/safekeepers/sk1'.
-safekeeper 1 started, pid: 2918437
-
-# create initial tenant and use it as a default for every future neon_local invocation
-> cargo neon tenant create --set-default
-tenant 9ef87a5bf0d92544f6fafeeb3239695c successfully created on the pageserver
-Created an initial timeline 'de200bd42b49cc1814412c7e592dd6e9' at Lsn 0/16B5A50 for tenant: 9ef87a5bf0d92544f6fafeeb3239695c
-Setting tenant 9ef87a5bf0d92544f6fafeeb3239695c as a default one
-
-# create postgres compute node
-> cargo neon endpoint create main
-
-# start postgres compute node
-> cargo neon endpoint start main
-Starting new endpoint main (PostgreSQL v14) on timeline de200bd42b49cc1814412c7e592dd6e9 ...
-Starting postgres at 'postgresql://cloud_admin@127.0.0.1:55432/postgres'
-
-# check list of running postgres instances
-> cargo neon endpoint list
- ENDPOINT  ADDRESS          TIMELINE                          BRANCH NAME  LSN        STATUS
- main      127.0.0.1:55432  de200bd42b49cc1814412c7e592dd6e9  main         0/16B5BA8  running
-```
-
-2. Now, it is possible to connect to postgres and run some queries:
-```text
-> psql -p 55432 -h 127.0.0.1 -U cloud_admin postgres
-postgres=# CREATE TABLE t(key int primary key, value text);
-CREATE TABLE
-postgres=# insert into t values(1,1);
-INSERT 0 1
-postgres=# select * from t;
- key | value
------+-------
-   1 | 1
-(1 row)
-```
-
-3. And create branches and run postgres on them:
-```sh
-# create branch named migration_check
-> cargo neon timeline branch --branch-name migration_check
-Created timeline 'b3b863fa45fa9e57e615f9f2d944e601' at Lsn 0/16F9A00 for tenant: 9ef87a5bf0d92544f6fafeeb3239695c. Ancestor timeline: 'main'
+This will build and install mGBA into `/usr/bin` and `/usr/lib`. Dependencies that are installed will be automatically detected, and features that are disabled if the dependencies are not found will be shown after running the `cmake` command after warnings about being unable to find them.
 
-# check branches tree
-> cargo neon timeline list
-(L) main [de200bd42b49cc1814412c7e592dd6e9]
-(L) ┗━ @0/16F9A00: migration_check [b3b863fa45fa9e57e615f9f2d944e601]
+If you are on macOS, the steps are a little different. Assuming you are using the homebrew package manager, the recommended commands to obtain the dependencies and build are:
 
-# create postgres on that branch
-> cargo neon endpoint create migration_check --branch-name migration_check
+	brew install cmake ffmpeg libzip qt5 sdl2 libedit lua pkg-config
+	mkdir build
+	cd build
+	cmake -DCMAKE_PREFIX_PATH=`brew --prefix qt5` ..
+	make
 
-# start postgres on that branch
-> cargo neon endpoint start migration_check
-Starting new endpoint migration_check (PostgreSQL v14) on timeline b3b863fa45fa9e57e615f9f2d944e601 ...
-Starting postgres at 'postgresql://cloud_admin@127.0.0.1:55434/postgres'
+Note that you should not do a `make install` on macOS, as it will not work properly.
 
-# check the new list of running postgres instances
-> cargo neon endpoint list
- ENDPOINT         ADDRESS          TIMELINE                          BRANCH NAME      LSN        STATUS
- main             127.0.0.1:55432  de200bd42b49cc1814412c7e592dd6e9  main             0/16F9A38  running
- migration_check  127.0.0.1:55434  b3b863fa45fa9e57e615f9f2d944e601  migration_check  0/16F9A70  running
+#### Windows developer building
 
-# this new postgres instance will have all the data from 'main' postgres,
-# but all modifications would not affect data in original postgres
-> psql -p 55434 -h 127.0.0.1 -U cloud_admin postgres
-postgres=# select * from t;
- key | value
------+-------
-   1 | 1
-(1 row)
+##### MSYS2
 
-postgres=# insert into t values(2,2);
-INSERT 0 1
+To build on Windows for development, using MSYS2 is recommended. Follow the installation steps found on their [website](https://msys2.github.io). Make sure you're running the 32-bit version ("MSYS2 MinGW 32-bit") (or the 64-bit version "MSYS2 MinGW 64-bit" if you want to build for x86_64) and run this additional command (including the braces) to install the needed dependencies (please note that this involves downloading over 1100MiB of packages, so it will take a long time):
 
-# check that the new change doesn't affect the 'main' postgres
-> psql -p 55432 -h 127.0.0.1 -U cloud_admin postgres
-postgres=# select * from t;
- key | value
------+-------
-   1 | 1
-(1 row)
-```
+	pacman -Sy --needed base-devel git ${MINGW_PACKAGE_PREFIX}-{cmake,ffmpeg,gcc,gdb,libelf,libepoxy,libzip,lua,pkgconf,qt5,SDL2,ntldd-git}
 
-4. If you want to run tests afterwards (see below), you must stop all the running pageserver, safekeeper, and postgres instances
-   you have just started. You can terminate them all with one command:
-```sh
-> cargo neon stop
-```
+Check out the source code by running this command:
 
-More advanced usages can be found at [Control Plane and Neon Local](./control_plane/README.md).
+	git clone https://github.com/mgba-emu/mgba.git
 
-#### Handling build failures
+Then finally build it by running these commands:
 
-If you encounter errors during setting up the initial tenant, it's best to stop everything (`cargo neon stop`) and remove the `.neon` directory. Then fix the problems, and start the setup again.
+	mkdir -p mgba/build
+	cd mgba/build
+	cmake .. -G "MSYS Makefiles"
+	make -j$(nproc --ignore=1)
 
-## Running tests
+Please note that this build of mGBA for Windows is not suitable for distribution, due to the scattering of DLLs it needs to run, but is perfect for development. However, if distributing such a build is desired (e.g. for testing on machines that don't have the MSYS2 environment installed), running `cpack -G ZIP` will prepare a zip file with all of the necessary DLLs.
 
-### Rust unit tests
+##### Visual Studio
 
-We are using [`cargo-nextest`](https://nexte.st/) to run the tests in Github Workflows.
-Some crates do not support running plain `cargo test` anymore, prefer `cargo nextest run` instead.
-You can install `cargo-nextest` with `cargo install cargo-nextest`.
+To build using Visual Studio is a similarly complicated setup. To begin you will need to install [vcpkg](https://github.com/Microsoft/vcpkg). After installing vcpkg you will need to install several additional packages:
 
-### Integration tests
+    vcpkg install ffmpeg[vpx,x264] libepoxy libpng libzip lua sdl2 sqlite3
 
-Ensure your dependencies are installed as described [here](https://github.com/neondatabase/neon#dependency-installation-notes).
+Note that this installation won't support hardware accelerated video encoding on Nvidia hardware. If you care about this, you'll need to install CUDA beforehand, and then substitute `ffmpeg[vpx,x264,nvcodec]` into the previous command.
 
-```sh
-git clone --recursive https://github.com/neondatabase/neon.git
+You will also need to install Qt. Unfortunately due to Qt being owned and run by an ailing company as opposed to a reasonable organization there is no longer an offline open source edition installer for the latest version, so you'll need to either fall back to an [old version installer](https://download.qt.io/official_releases/qt/5.12/5.12.9/qt-opensource-windows-x86-5.12.9.exe) (which wants you to create an otherwise-useless account, but you can bypass temporarily setting an invalid proxy or otherwise disabling networking), use the online installer (which requires an account regardless), or use vcpkg to build it (slowly). None of these are great options. For the installer you'll want to install the applicable MSVC versions. Note that the offline installers do not support MSVC 2019. For vcpkg you'll want to install it as such, which will take quite a while, especially on quad core or less computers:
 
-CARGO_BUILD_FLAGS="--features=testing" make
+    vcpkg install qt5-base qt5-multimedia
 
-./scripts/pytest
-```
+Next, open Visual Studio, select Clone Repository, and enter `https://github.com/mgba-emu/mgba.git`. When Visual Studio is done cloning, go to File > CMake and open the CMakeLists.txt file at the root of the checked out repository. From there, mGBA can be developed in Visual Studio similarly to other Visual Studio CMake projects.
 
-By default, this runs both debug and release modes, and all supported postgres versions. When
-testing locally, it is convenient to run just one set of permutations, like this:
+#### Toolchain building
 
-```sh
-DEFAULT_PG_VERSION=15 BUILD_TYPE=release ./scripts/pytest
-```
+If you have devkitARM (for 3DS), devkitPPC (for Wii), devkitA64 (for Switch), or vitasdk (for PS Vita), you can use the following commands for building:
 
-## Flamegraphs
+	mkdir build
+	cd build
+	cmake -DCMAKE_TOOLCHAIN_FILE=../src/platform/3ds/CMakeToolchain.txt ..
+	make
 
-You may find yourself in need of flamegraphs for software in this repository.
-You can use [`flamegraph-rs`](https://github.com/flamegraph-rs/flamegraph) or the original [`flamegraph.pl`](https://github.com/brendangregg/FlameGraph). Your choice!
+Replace the `-DCMAKE_TOOLCHAIN_FILE` parameter for the following platforms:
 
->[!IMPORTANT]
-> If you're using `lld` or `mold`, you need the `--no-rosegment` linker argument.
-> It's a [general thing with Rust / lld / mold](https://crbug.com/919499#c16), not specific to this repository.
-> See [this PR for further instructions](https://github.com/neondatabase/neon/pull/6764).
+- 3DS: `../src/platform/3ds/CMakeToolchain.txt`
+- Switch: `../src/platform/switch/CMakeToolchain.txt`
+- Vita: `../src/platform/psp2/CMakeToolchain.vitasdk`
+- Wii: `../src/platform/wii/CMakeToolchain.txt`
 
-## Cleanup
+### Dependencies
 
-For cleaning up the source tree from build artifacts, run `make clean` in the source directory.
+mGBA has no hard dependencies, however, the following optional dependencies are required for specific features. The features will be disabled if the dependencies can't be found.
 
-For removing every artifact from build and configure steps, run `make distclean`, and also consider removing the cargo binaries in the `target` directory, as well as the database in the `.neon` directory. Note that removing the `.neon` directory will remove your database, with all data in it. You have been warned!
+- Qt 5: for the GUI frontend. Qt Multimedia or SDL are required for audio.
+- SDL: for a more basic frontend and gamepad support in the Qt frontend. SDL 2 is recommended, but 1.2 is supported.
+- zlib and libpng: for screenshot support and savestate-in-PNG support.
+- libedit: for command-line debugger support.
+- ffmpeg or libav: for video, GIF, WebP, and APNG recording.
+- libzip or zlib: for loading ROMs stored in zip files.
+- SQLite3: for game databases.
+- libelf: for ELF loading.
+- Lua: for scripting.
+- json-c: for the scripting `storage` API.
 
-## Documentation
+SQLite3, libpng, and zlib are included with the emulator, so they do not need to be externally compiled first.
 
-[docs](/docs) Contains a top-level overview of all available markdown documentation.
+Footnotes
+---------
 
-- [sourcetree.md](/docs/sourcetree.md) contains overview of source tree layout.
+<a name="missing">[1]</a> Currently missing features are
 
-To view your `rustdoc` documentation in a browser, try running `cargo doc --no-deps --open`
+- OBJ window for modes 3, 4 and 5 ([Bug #5](http://mgba.io/b/5))
 
-See also README files in some source directories, and `rustdoc` style documentation comments.
+<a name="flashdetect">[2]</a> Flash memory size detection does not work in some cases. These can be configured at runtime, but filing a bug is recommended if such a case is encountered.
 
-Other resources:
+<a name="osxver">[3]</a> 10.9 is only needed for the Qt port. It may be possible to build or running the Qt port on 10.7 or older, but this is not officially supported. The SDL port is known to work on 10.5, and may work on older.
 
-- [SELECT 'Hello, World'](https://neon.tech/blog/hello-world/): Blog post by Nikita Shamgunov on the high level architecture
-- [Architecture decisions in Neon](https://neon.tech/blog/architecture-decisions-in-neon/): Blog post by Heikki Linnakangas
-- [Neon: Serverless PostgreSQL!](https://www.youtube.com/watch?v=rES0yzeERns): Presentation on storage system by Heikki Linnakangas in the CMU Database Group seminar series
+[downloads]: http://mgba.io/downloads.html
+[source]: https://github.com/mgba-emu/mgba/
 
-### Postgres-specific terms
+Copyright
+---------
 
-Due to Neon's very close relation with PostgreSQL internals, numerous specific terms are used.
-The same applies to certain spelling: i.e. we use MB to denote 1024 * 1024 bytes, while MiB would be technically more correct, it's inconsistent with what PostgreSQL code and its documentation use.
+mGBA is Copyright © 2013 – 2023 Jeffrey Pfau. It is distributed under the [Mozilla Public License version 2.0](https://www.mozilla.org/MPL/2.0/). A copy of the license is available in the distributed LICENSE file.
 
-To get more familiar with this aspect, refer to:
+mGBA contains the following third-party libraries:
 
-- [Neon glossary](/docs/glossary.md)
-- [PostgreSQL glossary](https://www.postgresql.org/docs/14/glossary.html)
-- Other PostgreSQL documentation and sources (Neon fork sources can be found [here](https://github.com/neondatabase/postgres))
+- [inih](https://github.com/benhoyt/inih), which is copyright © 2009 – 2020 Ben Hoyt and used under a BSD 3-clause license.
+- [LZMA SDK](http://www.7-zip.org/sdk.html), which is public domain.
+- [MurmurHash3](https://github.com/aappleby/smhasher) implementation by Austin Appleby, which is public domain.
+- [getopt for MSVC](https://github.com/skandhurkat/Getopt-for-Visual-Studio/), which is public domain.
+- [SQLite3](https://www.sqlite.org), which is public domain.
 
-## Join the development
-
-- Read [CONTRIBUTING.md](/CONTRIBUTING.md) to learn about project code style and practices.
-- To get familiar with a source tree layout, use [sourcetree.md](/docs/sourcetree.md).
-- To learn more about PostgreSQL internals, check http://www.interdb.jp/pg/index.html
+If you are a game publisher and wish to license mGBA for commercial usage, please email [licensing@mgba.io](mailto:licensing@mgba.io) for more information.
