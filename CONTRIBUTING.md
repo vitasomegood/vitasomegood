@@ -1,196 +1,79 @@
-Contribution Guidelines
-=======================
+# SameBoy Coding and Contribution Guidelines
 
-In order to contribute to mGBA, there are a few things to be mindful of so as to ease the process.
+## Issues
 
-Filing issues
--------------
-New issues should be filed on the [mGBA GitHub Issues tracker](http://mgba.io/i/). When filing issues, please include the following information:
+GitHub Issues are the most effective way to report a bug or request a feature in SameBoy. When reporting a bug, make sure you use the latest stable release, and make sure you mention the SameBoy frontend (Cocoa, SDL, Libretro) and operating system you're using. If you're using Linux/BSD/etc, or you build your own copy of SameBoy for another reason, give as much details as possible on your environment.
 
-* The build you are using. For recent builds, this is visible in the title bar. For example, `0.3-2134-4ec19aa`. On older builds, such as 0.2.1, this is not present, so please specify the version you downloaded or built. If present, this contains the version, branch name (if not `master`), a revision number and a truncated revision hash. For this example, it means that it's version 0.3, on `master`, commit number 2134 and revision hash `4ec19aa`. Additionally, `-dirty` will be appended if there are local changes that haven't been commited.
-* The operating system you're using, for example Windows 7 32-bit or Ubuntu 15.04 64-bit.
-* Your CPU and graphics card (usually not necessary). For example, Core i5-3570K and AMD Radeon R9 280X.
+If your bug involves a crash, please attach a crash log or a core dump. If you're using Linux/BSD/etc, or if you're using the Libretro core, please attach the `sameboy` binary (or `libretro_sameboy` library) in that case.
 
-Please also describe the issue in as much detail as possible, including the name of the games you have reproduced the issue on, and how you managed to enter the buggy state. If applicable, savestates can be renamed to be .png files and attached to the issue directly.
+If your bug is a regression, it'd be extremely helpful if you can report the the first affected version. You get extra credits if you use `git bisect` to point the exact breaking commit.
 
-Filing pull requests
---------------------
-When filing a pull request, please make sure you adhere to the coding style as outlined below, and are aware of the requirements for licensing. Furthermore, please make sure all commits in the pull request have coherent commit messages as well as the name of the component being modified in the commit message.
+If your bug is an emulation bug (Such as a failing test ROM), and you have access to a Game Boy you can test on, please confirm SameBoy is indeed behaving differently from hardware, and report both the emulated model and revision in SameBoy, and the hardware revision you're testing on.
 
-Some components are as follows:
+If your issue is a feature request, demonstrating use cases can help me better prioritize it.
 
-* ARM7: The ARM core
-* GBA: GBA code
-	* GBA Memory: Memory-specific
-	* GBA Video: Video, rendering
-	* GBA Audio: Audio processing
-	* GBA SIO: Serial I/O, multiplayer, link
-	* GBA Hardware: Extra devices, e.g. gyro, light sensor
-	* GBA RR: Rerecording features
-	* GBA Thread: Thread-layer abstractions
-	* GBA BIOS: High-level BIOS
-* Qt: Qt port-related code
-* SDL: SDL port-related code (including as used in other ports)
-* Video: Video recording code
-* Util: Common utility code
-* Tools: Miscellaneous tools
-* Debugger: Included debugging functionality
-* All: Changes that don't touch specific components but affect the project overall
+## Pull Requests
 
+To allow quicker integration into SameBoy's master branch, contributors are asked to follow SameBoy's style and coding guidelines. Keep in mind that despite the seemingly strict guidelines, all pull requests are welcome – not following the guidelines does not mean your pull request will not be accepted, but it will require manual tweaks from my side for integrating.
 
-Coding Style
-------------
-mGBA aims to have a consistent, clean codebase, so when contributing code to mGBA, please adhere to the following rules. If a pull request has style errors, you will be asked to fix them before the PR will be accepted.
+### Languages and Compilers
 
-### Naming
+SameBoy's core, SDL frontend, Libretro frontend, and automatic tester (Folders `Core`, `SDL` & `OpenDialog`, `libretro`, and `Tester`; respectively) are all written in C11. The Cocoa frontend, SameBoy's fork of Hex Fiend, JoyKit and the Quick Look previewer (Folders `Cocoa`, `HexFiend`, `JoyKit` and `QuickLook`; respectively) are all written in ARC-enabled Objective-C. The SameBoot ROMs (Under `BootROMs`) are written in rgbds-flavor SM83 assembly, with build tools in C11. The shaders (inside `Shaders`) are written in a polyglot GLSL and Metal style, with a few GLSL- and Metal-specific sources. The build system uses standalone Make, in the GNU flavor. Avoid adding new languages (C++, Swift, Python, CMake...) to any of the existing sub-projects.
 
-Variable names, including parameters, should all be in camelCase. File-scoped static variables must start with an underscore.
+SameBoy's main target compiler is Clang, but GCC is also supported when targeting Linux and Libretro. Other compilers (e.g. MSVC) are not supported, and unless there's a good reason, there's no need to go out of your way to add specific support for them. Extensions that are supported by both compilers (Such as `typeof`) may be used if it makes sense. It's OK if you can't test one of these compilers yourself; once you push a commit, the CI bot will let you know if you broke something.
 
-C struct names should start with a capital letter, and functions relating to these structs should start with the name of the class (including the capital letter) and be in camelCase after. C struct should not be `typedef`ed.
+### Third Party Libraries and Tools
 
-Functions not associated with structs should be in camelCase throughout. Static functions not associated with structs must start with an underscore.
+Avoid adding new required dependencies; run-time and compile-time dependencies alike. Most importantly, avoid linking against GPL licensed libraries (LGPL libraries are fine), so SameBoy can retain its Expat license.
 
-Enum values and `#define`s should be all caps with underscores.
+### Spacing, Indentation and Formatting
 
-Good:
+In all files and languages (Other than Makefiles when required), 4 spaces are used for indentation. Unix line endings (`\n`) are used exclusively, even in Windows-specific source files. (`\r` and `\t` shouldn't appear in any source file). Opening braces belong on the same line as their control flow directive, and on their own line when following a function prototype. The `else` keyword always starts on its own line. The `case` keyword is indented relative to its `switch` block, and the code inside a `case` is indented relative to its label. A control flow keyword should have a space between it and the following `(`, commas should follow a space, and operator (except `.` and `->`) should be surrounded by spaces.
 
-	static int _localVariable;
+Control flow statements must use `{}`, with the exception of `if` statements that only contain a single `break`, `continue`, or trivial `return` statements. If `{}`s are omitted, the statement must be on the same line as the `if` condition. Functions that do not have any argument must be specified as `(void)`, as mandated by the C standard. The `sizeof` and `typeof` operators should be used as if they're functions (With `()`). `*`, when used to declare pointer types (including functions that return pointers), and when used to dereference a pointer, is attached to the right side (The variable name) – not to the left, and not with spaces on both sides.
 
-	struct LocalStruct {
-		void (*methodName)(struct LocalStruct struct, param);
+No strict limitations on a line's maximum width, but use your best judgement if you think a statement would benefit from an additional line break.
 
-		int memberName;
-	};
+Well formatted code example:
 
-	enum {
-		ENUM_ITEM_1,
-		ENUM_ITEM_2
-	};
+```
+static void my_function(void)
+{
+    GB_something_t *thing = GB_function(&gb, GB_FLAG_ONE | GB_FLAG_TWO, sizeof(thing));
+    if (GB_is_thing(thing)) return;
+    
+    switch (*thing) {
+        case GB_QUACK:
+            // Something
+        case GB_DUCK:
+            // Something else
+    }
+}
+```
 
-	void LocalStructCreate(struct LocalStruct* struct);
-	
-	void functionName(int argument);
+Badly formatted code example:
+```
+static void my_function(){
+        GB_something_t* thing=GB_function(&gb , GB_FLAG_ONE|GB_FLAG_TWO , sizeof thing);
+        if( GB_is_thing ( thing ) )
+                return;
 
-	static void _LocalStructUse(struct LocalStruct* struct);
-	static void _function2(int argument2);
+        switch(* thing)
+        {
+        case GB_QUACK:
+                // Something
+        case GB_DUCK:
+                // Something else
+        }
+}
+```
 
-C++ classes should be confined to namespaces. For the Qt port, this namespace is called `QGBA`.
+### Other Coding Conventions
 
-Class names should be handled similarly to C structs. Fields should be prefixed according to their scoping:
+The primitive types to be used in SameBoy are `unsigned` and `signed` (Without the `int` keyword), the `(u)int*_t` types, `char *` for UTF-8 strings, `double` for non-integer numbers, and `bool` for booleans (Including in Objective-C code, avoid `BOOL`). As long as it's not mandated by a 3rd-party API (e.g. `int` when using file descriptors), avoid using other primitive types. Use `const` whenever possible. 
 
-* `m_` for non-static member.
-* `s_` for static member.
+Most C names should be `lower_case_snake_case`. Constants and macros use `UPPER_CASE_SNAKE_CASE`. Type definitions use a `_t` suffix. Type definitions, as well as non-static (exported) core symbols, should be prefixed with `GB_` (SameBoy's core is intended to be used as a library, so it shouldn't contaminate the global namespace without prefixes). Exported symbols that are only meant to be used by other parts of the core should still get the `GB_` prefix, but their header definition should be inside `#ifdef GB_INTERNAL`.
 
-### Braces
+For Objective-C naming conventions, use Apple's conventions (Some old Objective-C code mixes these with the C naming convention; new code should use Apple's convention exclusively). The name prefix for SameBoy classes and constants is `GB`. JoyKit's prefix is `JOY`, and Hex Fiend's prefix is `HF`.
 
-Braces do not go on their own lines, apart from the terminating brace. There should be a single space between the condition clause and the brace. Furthermore, braces must be used even for single-line blocks.
-
-Good:
-
-	if (condition) {
-		block;
-	} else if (condition2) {
-		block2;
-	} else {
-		block3;
-	}
-
-Bad (separate line):
-
-	if (condition)
-	{
-		block;
-	}
-	else if (condition2)
-	{
-		block2;
-	}
-	else
-	{
-		block3;
-	}
-
-Bad (missing braces):
-
-	if (condition)
-		statement;
-	else if (condition2)
-		statement2;
-	else
-		statement3;
-
-Bad (missing space):
-
-	if (condition){
-		block;
-	}
-
-### Spacing
-
-Indentation should be done using tabs and should match the level of braces. Alignment within a line should be done sparingly, but only done with spaces.
-
-### Header guards
-
-For C headers guards, the define should be the filename (including H), all-caps, with underscores instead of punctuation.
-
-Good:
-
-	#ifndef FILE_NAME_H
-	#define FILE_NAME_H
-
-	// Header
-
-	#endif
-
-There should be no comment on the `#endif`.
-
-For Qt (C++ header guards), the define should start with `QGBA_` and not include `_H`, but is otherwise the same. This is mostly for legacy reasons., and may change in the future.
-
-Good:
-
-	#ifndef QGBA_FILE_NAME
-	#define QGBA_FILE_NAME
-	
-	// Header
-	
-	#endif
-
-### Other
-
-Block statements such as `if`, `while` and `for` should have a space between the type of block and the parenthesis.
-
-Good:
-
-	while (condition) {
-		block;
-	}
-
-Bad:
-
-	while(condition) {
-		block;
-	}
-
-In C code, use `0` instead of `NULL`. This is mostly for legacy reasons and may change in the future. C code should also use `bool` types and values `true` and `false` instead of `1` and `0` where applicable. In C++ code, use `nullptr` instead of `NULL` or `0`.
-
-If a statement has no body, putting braces is not required, and a semicolon can be used. This is not required, but is suggested.
-
-Good:
-
-	while (f());
-
-Bad:
-
-	while (f()) {}
-
-
-For infinite loops that `break` statements internally, `while (true)` is preferred over `for (;;)`.
-
-Licensing
----------
-
-mGBA is licensed under the [Mozilla Public License version 2.0](https://www.mozilla.org/MPL/2.0/). This entails a few things when it comes to adding code to mGBA.
-
-* New code to mGBA will be licensed under the MPL 2.0 license.
-* GPL-licensed code cannot be added to mGBA upstream, but can be linked with mGBA when compiled.
-* MIT, BSD, CC0, etc., code can be added to mGBA upstream, but preferably in the `third-party` section if applicable.
+In all languages, prefer long, unambiguous names over short ambiguous ones.
