@@ -1,1 +1,13 @@
-build
+.ipynb_checkpoints
+.pytest_cache
+*.pyc
+tests/*.csv
+*.ipynb
+.venv
+.DS_Store
+docs/content/*.md
+!docs/content/_index.md
+!docs/content/*.ipynb
+dist
+public
+.vscode

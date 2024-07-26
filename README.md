@@ -1,68 +1,158 @@
-# SameBoy
+<div align="center">
+  <img src="docs/static/images/logo.png" alt="prince_logo" width="80%" />
+</div>
 
-SameBoy is an open source Game Boy (DMG) and Game Boy Color (CGB) emulator, written in portable C. It has a native Cocoa frontend for macOS, an SDL frontend for other operating systems, and a libretro core. It also includes a text-based debugger with an expression evaluator. Visit [the website](https://sameboy.github.io/).
+<br/>
 
-## Features
-Features common to both Cocoa and SDL versions:
- * Supports Game Boy (DMG) and Game Boy Color (CGB) emulation
- * Lets you choose the model you want to emulate regardless of ROM
- * High quality 96KHz audio
- * Battery save support
- * Save states
- * Includes open source DMG and CGB boot ROMs:
-   * Complete support for (and documentation of) *all* game-specific palettes in the CGB boot ROM, for accurate emulation of Game Boy games on a Game Boy Color
-   * Supports manual palette selection with key combinations, with 4 additional new palettes (A + B + direction)
-   * Supports palette selection in a CGB game, forcing it to run in 'paletted' DMG mode, if ROM allows doing so.
-   * Support for games with a non-Nintendo logo in the header
-   * No long animation in the DMG boot
- * Advanced text-based debugger with an expression evaluator, disassembler, conditional breakpoints, conditional watchpoints, backtracing and other features
- * Extremely high accuracy
- * Emulates [PCM_12 and PCM_34 registers](https://github.com/LIJI32/GBVisualizer)
- * T-cycle accurate emulation of LCD timing effects, supporting the Demotronic trick, Prehistorik Man, [GBVideoPlayer](https://github.com/LIJI32/GBVideoPlayer) and other tech demos
- * Real time clock emulation
- * Retina/High DPI display support, allowing a wider range of scaling factors without artifacts
- * Optional frame blending (Requires OpenGL 3.2 or later)
- * Several [scaling algorithms](https://sameboy.github.io/scaling/) (Including exclusive algorithms like OmniScale and Anti-aliased Scale2x; Requires OpenGL 3.2 or later or Metal)
+<div align="center">
+  <!-- Documentation -->
+  <a href="https://maxhalford.github.io/prince">
+    <img src="https://img.shields.io/website?label=docs&style=flat-square&url=https://maxhalford.github.io/prince" alt="documentation">
+  </a>
+  <!-- PyPi -->
+  <a href="https://pypi.org/project/prince/">
+    <img src="https://img.shields.io/pypi/v/prince.svg" alt="pypi" />
+  </a>
+  <!-- PePy -->
+  <a href="https://pepy.tech/project/prince">
+    <img src="https://static.pepy.tech/badge/prince" alt="pepy">
+  </a>
+  <!-- PePy by month -->
+  <a href="https://pepy.tech/project/prince">
+    <img src="https://static.pepy.tech/badge/prince/month" alt="pepy_month">
+  </a>
+  <!-- Unit tests -->
+  <a href="https://github.com/MaxHalford/prince/actions/workflows/unit-tests.yml">
+    <img src="https://github.com/MaxHalford/prince/actions/workflows/unit-tests.yml/badge.svg" alt="Unit tests" />
+  </a>
+  <!-- Code quality -->
+  <a href="https://github.com/MaxHalford/prince/actions/workflows/code-quality.yml">
+    <img src="https://github.com/MaxHalford/prince/actions/workflows/code-quality.yml/badge.svg" alt="Code quality" />
+  </a>
+  <!-- License -->
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="http://img.shields.io/:license-mit-ff69b4.svg" alt="license"/>
+  </a>
+</div>
 
-Features currently supported only with the Cocoa version:
- * Native Cocoa interface, with support for all system-wide features, such as drag-and-drop and smart titlebars
- * Game Boy Camera support
- 
-[Read more](https://sameboy.github.io/features/).
+<br/>
 
-## Compatibility
-SameBoy passes all of [blargg's test ROMs](http://gbdev.gg8.se/wiki/articles/Test_ROMs#Blargg.27s_tests), all of [mooneye-gb's](https://github.com/Gekkio/mooneye-gb) tests (Some tests require the original boot ROMs), and all of [Wilbert Pol's tests](https://github.com/wilbertpol/mooneye-gb/tree/master/tests/acceptance). SameBoy should work with most games and demos, please [report](https://github.com/LIJI32/SameBoy/issues/new) any broken ROM. The latest results for SameBoy's automatic tester are available [here](https://sameboy.github.io/automation/).
+Prince is a Python library for multivariate exploratory data analysis in Python. It includes a variety of methods for summarizing tabular data, including [principal component analysis (PCA)](https://www.wikiwand.com/en/Principal_component_analysis) and [correspondence analysis (CA)](https://www.wikiwand.com/en/Correspondence_analysis). Prince provides efficient implementations, using a scikit-learn API.
 
-## Contributing
-SameBoy is an open-source project licensed under the Expat license (with an additional exception for the iOS folder), and you're welcome to contribute by creating issues, implementing new features, improving emulation accuracy and fixing existing open issues. You can read the [contribution guidelines](CONTRIBUTING.md) to make sure your contributions are as effective as possible.
+## Example usage
 
-## Compilation
-SameBoy requires the following tools and libraries to build:
- * clang (Recommended; required for macOS) or GCC
- * make
- * macOS Cocoa frontend: macOS SDK and Xcode (For command line tools and ibtool)
- * SDL frontend: libsdl2
- * [rgbds](https://github.com/gbdev/rgbds/releases/), for boot ROM compilation
- * [cppp](https://github.com/BR903/cppp), for cleaning up headers when compiling SameBoy as a library
+```py
+>>> import prince
 
-On Windows, SameBoy also requires:
- * Visual Studio (For headers, etc.)
- * [GnuWin](http://gnuwin32.sourceforge.net/)
- * Running vcvars64 before running make. Make sure all required tools and libraries are in %PATH% and %lib%, respectively. (see [Build FAQ](https://github.com/LIJI32/SameBoy/blob/master/build-faq.md) for more details on Windows compilation)
+>>> dataset = prince.datasets.load_decathlon()
+>>> decastar = dataset.query('competition == "Decastar"')
 
-To compile, simply run `make`. The targets are:
- * `cocoa` (Default for macOS)
- * `sdl` (Default for everything else)
- * `lib` (Creates libsameboy.o and libsameboy.a for statically linking SameBoy, as well as a headers directory with corresponding headers; currently not supported on Windows due to linker limitations)
- * `ios` (Plain iOS .app bundle), `ios-ipa` (iOS IPA archive for side-loading), `ios-deb` (iOS deb package for jailbroken devices)
- * `libretro`
- * `bootroms`
- * `tester` 
+>>> pca = prince.PCA(n_components=5)
+>>> pca = pca.fit(decastar, supplementary_columns=['rank', 'points'])
+>>> pca.eigenvalues_summary
+          eigenvalue % of variance % of variance (cumulative)
+component
+0              3.114        31.14%                     31.14%
+1              2.027        20.27%                     51.41%
+2              1.390        13.90%                     65.31%
+3              1.321        13.21%                     78.52%
+4              0.861         8.61%                     87.13%
 
-You may also specify `CONF=debug` (default), `CONF=release`, `CONF=native_release` or `CONF=fat_release`  to control optimization, symbols and multi-architectures. `native_release` is faster than `release`, but is optimized to the host's CPU and therefore is not portable. `fat_release` is exclusive to macOS and builds x86-64 and ARM64 fat binaries; this requires using a recent enough `clang` and macOS SDK using `xcode-select`, or setting them explicitly with `CC=` and `SYSROOT=`, respectively. All other configurations will build to your host architecture, except for the iOS targets. You may set `BOOTROMS_DIR=...` to a directory containing precompiled boot ROM files, otherwise the build system will compile and use SameBoy's own boot ROMs.
+>>> pca.transform(dataset).tail()
+component                       0         1         2         3         4
+competition athlete
+OlympicG    Lorenzo      2.070933  1.545461 -1.272104 -0.215067 -0.515746
+            Karlivans    1.321239  1.318348  0.138303 -0.175566 -1.484658
+            Korkizoglou -0.756226 -1.975769  0.701975 -0.642077 -2.621566
+            Uldal        1.905276 -0.062984 -0.370408 -0.007944 -2.040579
+            Casarsa      2.282575 -2.150282  2.601953  1.196523 -3.571794
 
-The SDL port will look for resource files with a path relative to executable and inside the directory specified by the `DATA_DIR` variable. If you are packaging SameBoy, you may wish to override this by setting the `DATA_DIR` variable during compilation to the target path of the directory containing all files (apart from the executable, that's not necessary) from the `build/bin/SDL` directory in the source tree. Make sure the variable ends with a `/` character. On FreeDesktop environments, `DATA_DIR` will default to `/usr/local/share/sameboy/`. `PREFIX` and `DESTDIR` follow their standard usage and default to an empty string an `/usr/local`, respectively
+```
 
-Linux, BSD, and other FreeDesktop users can run `sudo make install` to install SameBoy as both a GUI app and a command line tool.
+```py
+>>> chart = pca.plot(dataset)
 
-SameBoy is compiled and tested on macOS, Ubuntu and 64-bit Windows 10.
+```
+
+<div align="center">
+  <img src="figures/decastar.svg" width="74%" />
+  <p>
+    <i>This chart is interactive, which doesn't show on GitHub. The green points are the column loadings.</i>
+  <p>
+</div>
+
+```py
+>>> chart = pca.plot(
+...     dataset,
+...     show_row_labels=True,
+...     show_row_markers=False,
+...     row_labels_column='athlete',
+...     color_rows_by='competition'
+... )
+
+```
+
+<div align="center">
+  <img src="figures/decastar_bis.svg" width="74%" />
+</div>
+
+## Installation
+
+```sh
+pip install prince
+```
+
+🎨 Prince uses [Altair](https://altair-viz.github.io/) for making charts.
+
+## Methods
+
+```mermaid
+flowchart TD
+    cat?(Categorical data?) --> |"✅"| num_too?(Numerical data too?)
+    num_too? --> |"✅"| FAMD
+    num_too? --> |"❌"| multiple_cat?(More than two columns?)
+    multiple_cat? --> |"✅"| MCA
+    multiple_cat? --> |"❌"| CA
+    cat? --> |"❌"| groups?(Groups of columns?)
+    groups? --> |"✅"| MFA
+    groups? --> |"❌"| shapes?(Analysing shapes?)
+    shapes? --> |"✅"| GPA
+    shapes? --> |"❌"| PCA
+```
+
+### [Principal component analysis (PCA)](https://maxhalford.github.io/prince/pca)
+
+### [Correspondence analysis (CA)](https://maxhalford.github.io/prince/ca)
+
+### [Multiple correspondence analysis (MCA)](https://maxhalford.github.io/prince/mca)
+
+### [Multiple factor analysis (MFA)](https://maxhalford.github.io/prince/mfa)
+
+### [Factor analysis of mixed data (FAMD)](https://maxhalford.github.io/prince/famd)
+
+### [Generalized procrustes analysis (GPA)](https://maxhalford.github.io/prince/gpa)
+
+## Correctness
+
+Prince is tested against scikit-learn and [FactoMineR](http://factominer.free.fr/). For the latter, [rpy2](https://rpy2.github.io/) is used to run code in R, and convert the results to Python, which allows running automated tests. See more in the [`tests`](/tests/) directory.
+
+## Citation
+
+Please use this citation if you use this software as part of a scientific publication.
+
+```bibtex
+@software{Halford_Prince,
+    author = {Halford, Max},
+    license = {MIT},
+    title = {{Prince}},
+    url = {https://github.com/MaxHalford/prince}
+}
+```
+
+## Support
+
+I made Prince when I was at university, back in 2016. I've had very little time over the years to maintain this package. I spent a significant amount of time in 2022 to revamp the entire package. Prince has now been downloaded over [1 million times](https://pepy.tech/project/prince). I would be grateful to anyone willing to [sponsor](https://github.com/sponsors/MaxHalford) me. Sponsorships allow me to spend more time working on open source software, including Prince.
+
+## License
+
+The MIT License (MIT). Please see the [license file](LICENSE) for more information.
